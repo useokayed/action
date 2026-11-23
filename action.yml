@@ -1,0 +1,94 @@
+name: "Okayed"
+description: "Catch App Store and Google Play rejections on every pull request. iOS, macOS and Android."
+author: "Okayed"
+branding:
+  icon: "check-circle"
+  color: "green"
+
+inputs:
+  path:
+    description: "Project folder (Xcode, Android, Flutter, React Native, Expo), .ipa, .apk, .aab, a macOS .app (or .zip of one) or .pkg, relative to the repo root."
+    default: "."
+  platform:
+    description: "Only scan one platform of a multi-platform repo: ios, macos or android."
+    default: ""
+  distribution:
+    description: "macOS only: app-store (Mac App Store rules) or direct (Developer ID signing, hardened runtime, notarization). Default: .okayed/config.json, else the signing certificate, else app-store."
+    default: ""
+  fail-on:
+    description: "Fail the job when findings at this level exist: blocker, warning or never."
+    default: "blocker"
+  comment:
+    description: "Post or update one Okayed comment on the pull request."
+    default: "true"
+  annotations:
+    description: "Add inline annotations for findings that point at a file."
+    default: "true"
+  upload-sarif:
+    description: "Upload SARIF to GitHub code scanning (public repos, or private repos with code scanning enabled)."
+    default: "true"
+  disable:
+    description: "Comma-separated rule IDs to skip."
+    default: ""
+  upload:
+    description: "Upload scan results (never source code) to your Okayed dashboard. Off by default."
+    default: "false"
+  api-token:
+    description: "Okayed organization API token for uploads. Store it as a repository secret, e.g. secrets.OKAYED_TOKEN."
+    default: ""
+  api-url:
+    description: "URL of your Okayed dashboard (https://...)."
+    default: ""
+  token:
+    description: "Token used to comment on the pull request."
+    default: ${{ github.token }}
+
+outputs:
+  verdict:
+    description: "GREEN, YELLOW or RED (worst across scanned apps)."
+    value: ${{ steps.scan.outputs.verdict }}
+  score:
+    description: "Lowest Ship Score (0-100) across scanned apps."
+    value: ${{ steps.scan.outputs.score }}
+  blockers:
+    description: "Number of blocker findings."
+    value: ${{ steps.scan.outputs.blockers }}
+  warnings:
+    description: "Number of warning findings."
+    value: ${{ steps.scan.outputs.warnings }}
+  sarif-file:
+    description: "Path of the SARIF report."
+    value: ${{ steps.scan.outputs.sarif-file }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: scan
+      shell: bash
+      run: node "${{ github.action_path }}/dist/index.js"
+      env:
+        SC_PATH: ${{ inputs.path }}
+        SC_PLATFORM: ${{ inputs.platform }}
+        SC_DISTRIBUTION: ${{ inputs.distribution }}
+        SC_FAIL_ON: ${{ inputs.fail-on }}
+        SC_COMMENT: ${{ inputs.comment }}
+        SC_ANNOTATIONS: ${{ inputs.annotations }}
+        SC_DISABLE: ${{ inputs.disable }}
+        SC_TOKEN: ${{ inputs.token }}
+        SC_UPLOAD: ${{ inputs.upload }}
+        SC_API_TOKEN: ${{ inputs.api-token }}
+        SC_API_URL: ${{ inputs.api-url }}
+
+    - name: Upload SARIF to code scanning
+      if: ${{ inputs.upload-sarif == 'true' && steps.scan.outputs.sarif-file != '' }}
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif-file }}
+        category: okayed-${{ steps.scan.outputs.category }}
+
+    - name: Fail on findings
+      if: ${{ steps.scan.outputs.failed == 'true' }}
+      shell: bash
+      run: |
+        echo "::error title=Okayed::${{ steps.scan.outputs.blockers }} blocker(s), ${{ steps.scan.outputs.warnings }} warning(s) at or above fail-on=${{ inputs.fail-on }}. See the job summary or PR comment."
+        exit 1
