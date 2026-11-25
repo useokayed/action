@@ -10903,8 +10903,8 @@ var require_bplistParser = __commonJS({
 });
 
 // src/index.ts
-import { appendFileSync, readFileSync as readFileSync7, writeFileSync } from "fs";
-import { join as join12, relative as relative2, resolve as resolve2 } from "path";
+import { appendFileSync, readFileSync as readFileSync9, writeFileSync as writeFileSync2 } from "fs";
+import { join as join14, relative as relative3, resolve as resolve2 } from "path";
 
 // ../core/dist/index.js
 var import_plist = __toESM(require_plist(), 1);
@@ -10913,8 +10913,8 @@ import { readdirSync as readdirSync6, statSync as statSync5 } from "fs";
 import { join as join2 } from "path";
 import { readdirSync, statSync, readFileSync, existsSync } from "fs";
 import { join, relative, sep } from "path";
-import { join as join11, resolve } from "path";
-import { dirname as dirname3 } from "path";
+import { join as join12, relative as relative2, resolve } from "path";
+import { dirname as dirname4 } from "path";
 import { readFileSync as readFileSync2 } from "fs";
 import { constants, inflateRawSync } from "zlib";
 import { closeSync, lstatSync, openSync, readFileSync as readFileSync3, readSync, readdirSync as readdirSync2, readlinkSync } from "fs";
@@ -12543,16 +12543,19 @@ var XMLParser = class {
 };
 
 // ../core/dist/index.js
-import { join as join6 } from "path";
-import { basename as basename2 } from "path";
-import { readdirSync as readdirSync4, statSync as statSync3 } from "fs";
-import { basename as basename3, dirname, join as join8 } from "path";
-import { readdirSync as readdirSync3, statSync as statSync2 } from "fs";
 import { join as join7 } from "path";
+import { basename as basename2, dirname, join as join6 } from "path";
+import { readFileSync as readFileSync6, readdirSync as readdirSync4, statSync as statSync3 } from "fs";
+import { basename as basename3, dirname as dirname2, join as join9 } from "path";
+import { readdirSync as readdirSync3, statSync as statSync2 } from "fs";
+import { join as join8 } from "path";
+import { inflateSync as inflateSync2 } from "zlib";
 import { readdirSync as readdirSync5, statSync as statSync4 } from "fs";
-import { basename as basename4, dirname as dirname2, join as join9 } from "path";
-import { readFileSync as readFileSync6 } from "fs";
-import { join as join10 } from "path";
+import { basename as basename4, dirname as dirname3, join as join10 } from "path";
+import { readFileSync as readFileSync7 } from "fs";
+import { join as join11 } from "path";
+import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync8, writeFileSync } from "fs";
+import { dirname as dirname5, join as join13 } from "path";
 var import_plist2 = __toESM(require_plist(), 1);
 import { basename as basename6 } from "path";
 var BUILT_INPUT_KINDS = ["ipa", "apk", "aab", "mac-app", "pkg"];
@@ -12601,7 +12604,7 @@ function walk(root, opts = {}) {
         continue;
       }
       if (st.isDirectory()) {
-        if (skip.has(name) || name.endsWith(".xcassets")) continue;
+        if (skip.has(name) || !opts.assets && name.endsWith(".xcassets")) continue;
         stack.push(full);
       } else if (st.isFile()) {
         if (st.size > maxSize) continue;
@@ -13251,6 +13254,16 @@ function parseMachO(buf) {
   }
   const s = parseThin(buf);
   return s ? { slices: [s] } : void 0;
+}
+function machOArchs(buf) {
+  if (buf.length < 8 || !isMachO(buf)) return [];
+  const be = buf.readUInt32BE(0);
+  const name = (c2) => CPU[c2] ?? `cpu${c2}`;
+  if (be !== 3405691582 && be !== 3405691583) return [name(buf.readUInt32LE(4))];
+  const step = be === 3405691583 ? 32 : 20;
+  const out = [];
+  for (let i = 0; i < buf.readUInt32BE(4) && 12 + i * step <= buf.length; i++) out.push(name(buf.readUInt32BE(8 + i * step)));
+  return out;
 }
 function primarySlice(m) {
   return m.slices.find((s) => s.cpu === "arm64") ?? m.slices[0];
@@ -14229,6 +14242,49 @@ var BACKGROUND_MODES = {
   fetch: { label: "refresh content in the background", code: /\bsetMinimumBackgroundFetchInterval\b|\bBGAppRefreshTask\b|\bperformFetchWithCompletionHandler\b|\.appRefresh\b|\bBackgroundFetch\b|\bregisterTaskAsync\b/, deps: /background[-_]?fetch|workmanager|background[-_]?task/i },
   processing: { label: "run long background tasks", code: /\bBGProcessingTask(?:Request)?\b|\bBGTaskScheduler\b|\bregisterTaskAsync\b/, deps: /background|workmanager/i }
 };
+var SECRET_FORMATS = [
+  { id: "stripe", name: "Stripe secret key", re: /\b[sr]k_live_[0-9A-Za-z]{20,}/ },
+  { id: "openai", name: "OpenAI API key", re: /\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{40,}|\bsk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}/ },
+  { id: "anthropic", name: "Anthropic API key", re: /\bsk-ant-(?:api|admin)\d\d-[A-Za-z0-9_-]{60,}/ },
+  { id: "aws", name: "AWS access key", re: /\bAKIA[0-9A-Z]{16}\b/, check: (m) => !/EXAMPLE$/.test(m) },
+  { id: "github", name: "GitHub token", re: /\bgh[pousr]_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{60,}/ },
+  { id: "slack", name: "Slack token", re: /\bxox[abp]-\d{8,}-[A-Za-z0-9-]{20,}/ },
+  { id: "sendgrid", name: "SendGrid API key", re: /\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}\b/ },
+  { id: "private-key", name: "private key", re: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----(?:\\n|\s)+[A-Za-z0-9+/=]{48,}/ },
+  { id: "supabase", name: "Supabase service_role key", re: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/, check: isServiceRole }
+];
+function isServiceRole(jwt) {
+  try {
+    const p = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"));
+    return p.role === "service_role";
+  } catch {
+    return false;
+  }
+}
+var NOT_APP = /(?:^|\/)(?:[^/]*tests?|__mocks__|mocks?|fixtures?|examples?|samples?|docs?)\//i;
+function findSecrets(sources, binary) {
+  const out = [];
+  for (const f of SECRET_FORMATS) {
+    let n = 0;
+    for (const src of sources) {
+      if (n >= 3) break;
+      if (!binary && NOT_APP.test(src.file)) continue;
+      const g = new RegExp(f.re.source, "g");
+      let m;
+      let guard = 0;
+      while ((m = g.exec(src.text)) && guard++ < 200) {
+        if (f.check && !f.check(m[0])) continue;
+        if (src.code && src.lines && isCommentLine(src.text, m.index)) continue;
+        const shown = f.id === "private-key" ? "-----BEGIN \u2026 PRIVATE KEY-----" : `${m[0].slice(0, f.id === "supabase" ? 4 : 8)}\u2026 (hidden)`;
+        const evidence = src.lines ? { file: src.file, line: lineOf(src.text, m.index), detail: shown } : { file: src.file, detail: shown };
+        out.push({ id: f.id, name: f.name, evidence, via: binary ? "binary" : "code" });
+        n++;
+        break;
+      }
+    }
+  }
+  return out;
+}
 var LANG_BY_EXT = [
   [".swift", "Swift"],
   [".m", "Objective-C"],
@@ -14245,6 +14301,7 @@ var LANG_BY_EXT = [
 var STRING_EXTS = [".strings", ".xcstrings", ".storyboard", ".xib", ".arb"];
 var JS_EXTS = [".js", ".jsx", ".ts", ".tsx", ".mjs"];
 var JS_SKIP = /* @__PURE__ */ new Set([...VENDOR_DIRS, "ios", "android", "web-build", "coverage", "__tests__", "__mocks__", "e2e", "scripts", "server", "backend", "functions", "supabase", "docs", ".storybook", "storybook"]);
+var TEST_SRC = /\/src\/(?:test|androidTest|testFixtures|sharedTest)\w*\//;
 function collectAppCode(root, framework, native) {
   const files = /* @__PURE__ */ new Set();
   if (native.iosDir) {
@@ -14252,7 +14309,7 @@ function collectAppCode(root, framework, native) {
     for (const f of walk(native.iosDir, { exts: STRING_EXTS, maxSize: 16 * 1024 * 1024 })) files.add(f);
   }
   for (const d of native.androidSrcDirs ?? []) {
-    for (const f of walk(d, { exts: [".kt", ".java"] })) files.add(f);
+    for (const f of walk(d, { exts: [".kt", ".java"] })) if (!TEST_SRC.test(f)) files.add(f);
     for (const f of walk(d, { exts: [".xml"] })) if (/\/res\/values[^/]*\/strings\.xml$/.test(f)) files.add(f);
   }
   if (framework === "flutter") {
@@ -14282,7 +14339,8 @@ function readSources(root, files) {
   const out = [];
   for (const f of files) {
     const text = readText(f);
-    if (text) out.push({ file: rel(root, f), text, lines: true, code: LANG_BY_EXT.some(([e]) => f.endsWith(e)) });
+    const shown = text && /\.(?:swift|mm?)$/.test(f) ? text.replace(/\bcomment:\s*"(?:[^"\\\n]|\\.)*"/g, (c2) => " ".repeat(c2.length)) : text;
+    if (shown) out.push({ file: rel(root, f), text: shown, lines: true, code: LANG_BY_EXT.some(([e]) => f.endsWith(e)) });
   }
   return out;
 }
@@ -14385,6 +14443,7 @@ function scanSignals(sources, deps, opts) {
     if (UGC_DEPS.test(d.name)) ugc.push({ id: "chat-dep", name: `${d.name} (chat between users)`, evidence: d.evidence, via: "dependency" });
   }
   return {
+    secrets: findSecrets(sources, !!opts.binary),
     signIn: find(SIGN_IN, 2),
     purchases,
     subscriptions: find(SUBSCRIPTION, 2),
@@ -15022,6 +15081,12 @@ function parsePkg(path, opts = {}) {
   if (apps.length > 1) notAudited.push(`The package installs ${apps.length} apps; only ${apps[0]} was checked.`);
   return [parseMacApp(fs, apps[0], { root: path, inputKind: "pkg", distribution: opts.distribution, notAudited, installer })];
 }
+function baseConfigName(body) {
+  const rel2 = body.match(/baseConfigurationReferenceRelativePath = ("(?:[^"\\]|\\.)*"|[^;]+);/)?.[1];
+  if (rel2) return basename2(rel2.replace(/^"|"$/g, "").trim());
+  const named = body.match(/baseConfigurationReference = \w+ \/\* (.+?) \*\//)?.[1];
+  return named ? basename2(named) : void 0;
+}
 function parseBuildConfigs(pbx) {
   const out = [];
   let from = 0;
@@ -15031,7 +15096,7 @@ function parseBuildConfigs(pbx) {
     const bsKey = pbx.indexOf("buildSettings = {", at);
     if (bsKey < 0) break;
     const header = pbx.slice(at, bsKey);
-    const baseConfigFile = header.match(/baseConfigurationReference = \w+ \/\* (.+?) \*\//)?.[1];
+    const baseConfigFile = baseConfigName(header);
     let depth = 0;
     let i = bsKey + "buildSettings = ".length;
     const start = i;
@@ -15070,17 +15135,28 @@ function parseBuildConfigs(pbx) {
   }
   return out;
 }
+function readXcconfig(file, seen = /* @__PURE__ */ new Set()) {
+  if (seen.has(file)) return {};
+  seen.add(file);
+  const vars = {};
+  for (const line of (readText(file) ?? "").split("\n")) {
+    const inc = line.match(/^\s*#include\??\s+"([^"]+)"/);
+    if (inc) {
+      Object.assign(vars, readXcconfig(join6(dirname(file), inc[1]), seen));
+      continue;
+    }
+    const l = line.replace(/(^|\s)\/\/.*$/, "").trim();
+    const m = l.match(/^([A-Za-z0-9_]+)(\[[^\]]*\])?\s*=\s*(.*)$/);
+    if (!m) continue;
+    const key = m[1] + (m[2] && /sdk=macosx/.test(m[2]) ? "[sdk=macosx*]" : "");
+    if (m[2] && !key.includes("[")) continue;
+    vars[key] = m[3].trim().replace(/;+$/, "").trim();
+  }
+  return vars;
+}
 function readXcconfigs(dir) {
   const out = /* @__PURE__ */ new Map();
-  for (const f of walk(dir, { exts: [".xcconfig", ".xcconfig.template"] })) {
-    const vars = {};
-    for (const line of (readText(f) ?? "").split("\n")) {
-      const l = line.replace(/\/\/.*$/, "").trim();
-      const m = l.match(/^([A-Za-z0-9_]+)(?:\[[^\]]*\])?\s*=\s*(.*)$/);
-      if (m) vars[m[1]] = m[2].trim();
-    }
-    out.set(basename2(f), vars);
-  }
+  for (const f of walk(dir, { exts: [".xcconfig", ".xcconfig.template"] })) out.set(basename2(f), readXcconfig(f));
   return out;
 }
 var NON_APP_BUNDLE = /(tests?|uitests|extension|widget|watch|intents|clip|notification|share|keyboard|action)(\b|$)/i;
@@ -15172,12 +15248,16 @@ function parseTargets(pbx, iosDir) {
     const cfgs = ids.map((id) => objs.get(id) ?? "").filter(Boolean);
     const release = cfgs.find((c2) => /\bname = "?Release"?;/.test(c2)) ?? cfgs[0];
     if (!release) return void 0;
-    const base = release.match(/baseConfigurationReference = \w+ \/\* (.+?) \*\//)?.[1];
+    const base = baseConfigName(release);
     return { settings: settingsOf(release), base };
   };
   const projectBody = [...objs.values()].find((b) => /\bisa = PBXProject;/.test(b));
   const project = configsOf(projectBody?.match(/buildConfigurationList = ([0-9A-Fa-f]{24})/)?.[1]);
   const xc = (file) => file ? xcconfigs.get(file) ?? xcconfigs.get(file + ".template") : void 0;
+  const anyXcconfig = (key) => {
+    for (const vars of xcconfigs.values()) if (vars[key] !== void 0) return vars[key];
+    return void 0;
+  };
   const out = [];
   for (const [id, body] of objs) {
     if (!/\bisa = PBXNativeTarget;/.test(body)) continue;
@@ -15187,13 +15267,76 @@ function parseTargets(pbx, iosDir) {
       if (value === void 0) return void 0;
       let v = value;
       for (let pass = 0; pass < 5 && /\$[({]/.test(v); pass++) {
-        v = v.replace(/\$[({]([A-Za-z0-9_]+)(?::[^)}]*)?[)}]/g, (whole, key) => key === "inherited" ? "" : key === "TARGET_NAME" || key === "PRODUCT_NAME" && !settings.PRODUCT_NAME ? field(body, "name") ?? whole : settings[key] ?? whole);
+        v = v.replace(/\$[({]([A-Za-z0-9_]+)(?::[^)}]*)?[)}]/g, (whole, key) => key === "inherited" ? "" : key === "TARGET_NAME" || key === "PRODUCT_NAME" && !settings.PRODUCT_NAME ? field(body, "name") ?? whole : settings[key] ?? anyXcconfig(key) ?? whole);
       }
       return v.trim();
     };
     out.push({ id, name: field(body, "name") ?? id, productType: field(body, "productType") ?? "", settings, resolve: resolve22 });
   }
   return out;
+}
+var APP_TYPE = "com.apple.product-type.application";
+var TEST_TYPE = /bundle\.(?:unit-test|ui-testing)/;
+function buildsForIos(t) {
+  const sdk = t.resolve(t.settings.SDKROOT) ?? "";
+  const supported = t.resolve(t.settings.SUPPORTED_PLATFORMS) ?? "";
+  if (supported) return /\biphoneos\b/.test(supported);
+  return !sdk || sdk === "iphoneos" || sdk === "auto";
+}
+function buildsForMac(t) {
+  const sdk = t.resolve(t.settings.SDKROOT) ?? "";
+  const supported = t.resolve(t.settings.SUPPORTED_PLATFORMS) ?? "";
+  if (supported ? /\bmacosx\b/.test(supported) : sdk === "macosx") return true;
+  return /^YES$/i.test(t.resolve(t.settings.SUPPORTS_MACCATALYST) ?? "") && buildsForIos(t);
+}
+function mainAppTarget(pbx, dir, platform, distribution) {
+  const apps = parseTargets(pbx, dir).filter((t) => t.productType === APP_TYPE && (platform === "macos" ? buildsForMac(t) : buildsForIos(t)));
+  const store = (t) => /app.?store|\bmas\b/i.test(t.name);
+  const id = (t) => t.resolve(t.settings.PRODUCT_BUNDLE_IDENTIFIER) ?? "";
+  return [...apps].sort((a, b) => {
+    if (platform === "macos" && store(a) !== store(b)) return store(a) === (distribution !== "direct") ? -1 : 1;
+    const variant = (t) => /alpha|beta|staging|dev(?:elop\w*)?\b|debug|nightly|canary|internal|demo|sample|example|local|experimental/i.test(t.name) ? 1 : 0;
+    return variant(a) - variant(b) || id(a).length - id(b).length || a.name.length - b.name.length;
+  })[0];
+}
+function groupPaths(objs) {
+  const parent = /* @__PURE__ */ new Map();
+  const ids = (body, field) => body.match(new RegExp(`\\b${field} = \\(([^)]*)\\)`))?.[1]?.match(/[0-9A-Fa-f]{24}/g) ?? [];
+  for (const [id, b] of objs) if (/isa = PBX(?:Group|VariantGroup);/.test(b)) for (const c2 of ids(b, "children")) parent.set(c2, id);
+  const pathOf = (id) => {
+    const b = objs.get(id) ?? "";
+    const own = b.match(/\bpath = ("(?:[^"\\]|\\.)*"|[^;]+);/)?.[1]?.replace(/^"|"$/g, "") ?? "";
+    const tree = b.match(/sourceTree = ("[^"]*"|\w+);/)?.[1]?.replace(/"/g, "");
+    const up = parent.get(id);
+    const base = tree === "SOURCE_ROOT" || !up ? "" : pathOf(up);
+    return [base, own].filter(Boolean).join("/");
+  };
+  const out = /* @__PURE__ */ new Map();
+  for (const id of objs.keys()) out.set(id, pathOf(id));
+  return out;
+}
+function outOfScope(pbx, dir, platform) {
+  const objs = pbxObjects(pbx);
+  const paths = groupPaths(objs);
+  const keepFiles = /* @__PURE__ */ new Set(), dropFiles = /* @__PURE__ */ new Set(), keepDirs = [], dropDirs = [];
+  for (const t of parseTargets(pbx, dir)) {
+    const body = objs.get(t.id) ?? "";
+    const inScope = !TEST_TYPE.test(t.productType) && (platform === "macos" ? buildsForMac(t) : buildsForIos(t));
+    const groups = body.match(/fileSystemSynchronizedGroups = \(([^)]*)\)/)?.[1]?.match(/[0-9A-Fa-f]{24}/g) ?? [];
+    for (const g of groups) (inScope ? keepDirs : dropDirs).push(`${paths.get(g) ?? ""}/`);
+    const phases = body.match(/buildPhases = \(([^)]*)\)/)?.[1]?.match(/[0-9A-Fa-f]{24}/g) ?? [];
+    for (const ph of phases) {
+      const pb = objs.get(ph) ?? "";
+      if (!/isa = PBXSourcesBuildPhase;/.test(pb)) continue;
+      for (const bf of pb.match(/files = \(([^)]*)\)/)?.[1]?.match(/[0-9A-Fa-f]{24}/g) ?? []) {
+        const ref = (objs.get(bf) ?? "").match(/fileRef = ([0-9A-Fa-f]{24})/)?.[1];
+        const p = ref ? paths.get(ref) : void 0;
+        if (p) (inScope ? keepFiles : dropFiles).add(p);
+      }
+    }
+  }
+  const under = (p, dirs) => dirs.some((d) => d.length > 1 && p.startsWith(d));
+  return (p) => !keepFiles.has(p) && !under(p, keepDirs) && (dropFiles.has(p) || under(p, dropDirs));
 }
 var ROLE_BY_TYPE = {
   "com.apple.product-type.application": "helper-app",
@@ -15208,12 +15351,10 @@ var ROLE_BY_TYPE = {
   "com.apple.product-type.bundle": "framework"
 };
 function isMacTarget(t) {
-  const sdk = t.resolve(t.settings.SDKROOT) ?? "";
-  const supported = t.resolve(t.settings.SUPPORTED_PLATFORMS) ?? "";
-  return sdk === "macosx" || /\bmacosx\b/.test(supported) || isCatalyst(t);
+  return buildsForMac(t);
 }
 function isCatalyst(t) {
-  return /^YES$/i.test(t.resolve(t.settings.SUPPORTS_MACCATALYST) ?? "") && (t.resolve(t.settings.SDKROOT) ?? "") !== "macosx";
+  return /^YES$/i.test(t.resolve(t.settings.SUPPORTS_MACCATALYST) ?? "") && (t.resolve(t.settings.SDKROOT) ?? "") !== "macosx" && buildsForIos(t);
 }
 function forMac(t) {
   const settings = { ...t.settings };
@@ -15226,12 +15367,10 @@ function forMac(t) {
 function xcodePlatforms(pbx, iosDir) {
   const apps = parseTargets(pbx, iosDir).filter((t) => t.productType === "com.apple.product-type.application");
   const out = /* @__PURE__ */ new Set();
+  const iosApp = mainAppTarget(pbx, iosDir, "ios");
   for (const t of apps) {
-    const sdk = t.resolve(t.settings.SDKROOT) ?? "";
-    const supported = t.resolve(t.settings.SUPPORTED_PLATFORMS) ?? "";
-    if (isMacTarget(t)) out.add("macos");
-    if (isCatalyst(t)) out.add("ios");
-    if (sdk === "iphoneos" || /\biphoneos\b/.test(supported) || !sdk && !supported) out.add("ios");
+    if (isMacTarget(t) && (!isCatalyst(t) || t.id === iosApp?.id)) out.add("macos");
+    if (isCatalyst(t) || buildsForIos(t)) out.add("ios");
   }
   return out.size ? ["ios", "macos"].filter((p) => out.has(p)) : ["ios"];
 }
@@ -15259,7 +15398,7 @@ function macProjectFacts(args) {
     else if (role === "helper-app" && /launcher|login.?(item|helper)|autostart/i.test(`${t.name} ${t.settings.PRODUCT_BUNDLE_IDENTIFIER ?? ""}`)) role = "login-item";
     const executable = role !== "framework";
     const entFile = t.resolve(t.settings.CODE_SIGN_ENTITLEMENTS)?.replace(/^\$[({]SRCROOT[)}]\/?/, "").replace(/^\.\//, "");
-    const entAbs = entFile ? join6(iosDir, entFile) : void 0;
+    const entAbs = entFile ? join7(iosDir, entFile) : void 0;
     const entText = entAbs && exists(entAbs) ? readText(entAbs) : void 0;
     const fromFile = entText && parsePlist(Buffer.from(entText)) || {};
     const fromSettings = entitlementsFromBuildSettings(t.settings, t.resolve);
@@ -15292,7 +15431,7 @@ function macProjectFacts(args) {
     const key = u.plistKeys.find((k) => k in args.infoPlist);
     if (key) sig.autoUpdaters.push({ id: u.id, name: u.name, via: "config", evidence: { file: args.infoPlistPath, detail: `Info.plist ${key}` } });
   }
-  const cart = readText(join6(iosDir, "Cartfile.resolved")) ?? readText(join6(root, "Cartfile.resolved"));
+  const cart = readText(join7(iosDir, "Cartfile.resolved")) ?? readText(join7(root, "Cartfile.resolved"));
   const cartHit = cart?.match(/^github "sparkle-project\/Sparkle".*$/m);
   if (cartHit) sig.autoUpdaters.unshift({ id: "sparkle", name: "Sparkle", via: "dependency", evidence: { file: "Cartfile.resolved", line: lineOf(cart, cartHit.index), detail: cartHit[0] } });
   for (const d of args.linkedSdks) {
@@ -15320,6 +15459,11 @@ function macProjectFacts(args) {
     screenshots: readScreenshots(root, [iosDir, root])
   };
   return { macos, entitlements: mainEnts };
+}
+function looksDirect(m) {
+  if (m.distributionSource !== "default" || m.sandboxEnabled && !m.autoUpdaters.length) return void 0;
+  const why = [m.autoUpdaters.length && m.autoUpdaters[0].name, m.installOutsideContainer.some((u) => u.key === "privileged-helper") && "a privileged helper", m.hardenedRuntime && "Hardened Runtime"].filter(Boolean);
+  return why.length ? `This Mac app looks like a direct download (${[!m.sandboxEnabled && "no App Sandbox", ...why].filter(Boolean).join(", ")}), but it was checked against Mac App Store rules. If you ship it yourself, run with --outside-store (or set "distribution": "direct" in .okayed/config.json).` : void 0;
 }
 var DIRECT_PROJECT_NOTE = "Developer ID certificate, secure timestamp and notarization are set when you export, so they weren't checked here. Scan the exported .app (or its .zip / .pkg) too.";
 var REQUIRED_REASON_CATEGORIES = [
@@ -15409,16 +15553,16 @@ var APPLE_FIELDS = /* @__PURE__ */ new Set([
 function readAppleListing(root, searchDirs) {
   const out = [];
   for (const dir of searchDirs) {
-    const meta = join7(dir, "fastlane", "metadata");
+    const meta = join8(dir, "fastlane", "metadata");
     if (!exists(meta)) continue;
     for (const locale of safeList(meta)) {
-      const ldir = join7(meta, locale);
+      const ldir = join8(meta, locale);
       if (locale === "android" || locale === "review_information" || !isDir(ldir)) continue;
       for (const f of safeList(ldir)) {
         const field = f.replace(/\.txt$/, "");
         if (!f.endsWith(".txt") || !APPLE_FIELDS.has(field)) continue;
-        const text = readText(join7(ldir, f));
-        if (text !== void 0) out.push({ locale, field, text, file: rel(root, join7(ldir, f)) });
+        const text = readText(join8(ldir, f));
+        if (text !== void 0) out.push({ locale, field, text, file: rel(root, join8(ldir, f)) });
       }
     }
     if (out.length) break;
@@ -15427,9 +15571,9 @@ function readAppleListing(root, searchDirs) {
 }
 function readAppleReviewInfo(root, searchDirs) {
   for (const dir of searchDirs) {
-    const ri = join7(dir, "fastlane", "metadata", "review_information");
+    const ri = join8(dir, "fastlane", "metadata", "review_information");
     if (!exists(ri) || !isDir(ri)) continue;
-    const read = (f) => readText(join7(ri, f))?.trim() || void 0;
+    const read = (f) => readText(join8(ri, f))?.trim() || void 0;
     return { demoUser: read("demo_user.txt"), demoPassword: read("demo_password.txt") ? "set" : void 0, notes: read("notes.txt"), file: rel(root, ri) };
   }
   return void 0;
@@ -15448,6 +15592,60 @@ function isDir(p) {
     return false;
   }
 }
+function transparentPixels(png) {
+  if (png.length < 33 || png.readUInt32BE(0) !== 2303741511) return 0;
+  const w = png.readUInt32BE(16);
+  const h = png.readUInt32BE(20);
+  const depth = png[24];
+  const color = png[25];
+  const channels = color === 6 ? 4 : color === 4 ? 2 : 0;
+  if (!channels || depth !== 8 && depth !== 16 || png[28] !== 0 || w * h > 4096 * 4096) return 0;
+  const idat = [];
+  for (let p = 8; p + 12 <= png.length; ) {
+    const len = png.readUInt32BE(p);
+    const type = png.toString("latin1", p + 4, p + 8);
+    if (type === "IDAT") idat.push(png.subarray(p + 8, p + 8 + len));
+    if (type === "IEND") break;
+    p += 12 + len;
+  }
+  let raw;
+  try {
+    raw = inflateSync2(Buffer.concat(idat));
+  } catch {
+    return 0;
+  }
+  const bpp = channels * depth / 8;
+  const stride = w * bpp;
+  if (raw.length < (stride + 1) * h) return 0;
+  let prev = new Uint8Array(stride);
+  let clear = 0;
+  for (let y = 0; y < h; y++) {
+    const at = y * (stride + 1);
+    const filter = raw[at];
+    const row = new Uint8Array(stride);
+    for (let x = 0; x < stride; x++) {
+      const left = x >= bpp ? row[x - bpp] : 0;
+      const up = prev[x];
+      const corner = x >= bpp ? prev[x - bpp] : 0;
+      let add = 0;
+      if (filter === 1) add = left;
+      else if (filter === 2) add = up;
+      else if (filter === 3) add = left + up >> 1;
+      else if (filter === 4) {
+        const e = left + up - corner;
+        const a = Math.abs(e - left);
+        const b = Math.abs(e - up);
+        const c2 = Math.abs(e - corner);
+        add = a <= b && a <= c2 ? left : b <= c2 ? up : corner;
+      }
+      row[x] = raw[at + 1 + x] + add & 255;
+    }
+    const alphaAt = bpp - depth / 8;
+    for (let x = alphaAt; x < stride; x += bpp) if (row[x] < 250) clear++;
+    prev = row;
+  }
+  return clear;
+}
 var SOURCE_EXTS = [".swift", ".m", ".mm", ".h", ".c", ".cpp"];
 var NON_APP_TARGET = /(Tests?|UITests|Extension|Widget|Watch|Intents|Clip|NotificationService|Share|Keyboard)(\b|\/|$)/i;
 function parseIosProject(root, iosDir, framework, opts = {}) {
@@ -15455,9 +15653,15 @@ function parseIosProject(root, iosDir, framework, opts = {}) {
   const pbxPath = findPbxproj(iosDir);
   const pbx = pbxPath ? readText(pbxPath) : void 0;
   if (!pbx) notAudited.push("No .xcodeproj found: build settings (bundle id, generated Info.plist keys) were not read.");
+  const platform = opts.as ?? (pbx?.match(/SDKROOT = (\w+);/)?.[1] === "macosx" ? "macos" : "ios");
+  const mainTarget = pbx ? mainAppTarget(pbx, iosDir, platform, opts.distribution) : void 0;
+  const skip = pbx && mainTarget ? outOfScope(pbx, iosDir, platform) : () => false;
+  const inScope = (abs) => !skip(rel(iosDir, abs));
   const plists = walk(iosDir, { exts: ["Info.plist"] }).filter((p) => basename3(p) === "Info.plist");
   const appPlists = plists.filter((p) => !NON_APP_TARGET.test(rel(iosDir, p)));
-  const chosen = pickMainPlist(appPlists.length ? appPlists : plists);
+  const declared = mainTarget?.resolve(mainTarget.settings.INFOPLIST_FILE)?.replace(/^\$[({](?:SRCROOT|PROJECT_DIR)[)}]\/?/, "").replace(/^\.\//, "");
+  const declaredAbs = declared && !/\$[({]/.test(declared) ? join9(iosDir, declared) : void 0;
+  const chosen = declaredAbs && exists(declaredAbs) ? declaredAbs : mainTarget && !declared && mainTarget.settings.GENERATE_INFOPLIST_FILE ? void 0 : pickMainPlist(appPlists.length ? appPlists : plists);
   let infoPlist = {};
   const infoPlistKeyEvidence = {};
   if (chosen) {
@@ -15468,10 +15672,11 @@ function parseIosProject(root, iosDir, framework, opts = {}) {
       infoPlistKeyEvidence[key] = { file: rel(root, chosen), line };
     }
   }
-  const target = pbx ? mainTargetSettings(pbx, iosDir, chosen ? rel(iosDir, chosen) : void 0) : void 0;
+  const target = mainTarget ?? (pbx ? mainTargetSettings(pbx, iosDir, chosen ? rel(iosDir, chosen) : void 0) : void 0);
   if (target) {
     for (const [k, v] of Object.entries(target.settings)) {
-      const key = k.match(/^INFOPLIST_KEY_(\w+)$/)?.[1];
+      const cond = k.match(/^INFOPLIST_KEY_(\w+)(?:\[sdk=(iphone(?:os|simulator)|macosx)[^\]]*\])?$/);
+      const key = cond && (!cond[2] || cond[2] === (platform === "macos" ? "macosx" : "iphoneos")) ? cond[1] : void 0;
       if (key && !(key in infoPlist)) {
         infoPlist[key] = target.resolve(v) ?? v;
         const idx = pbx.indexOf(k);
@@ -15489,7 +15694,7 @@ function parseIosProject(root, iosDir, framework, opts = {}) {
   const version2 = pick(infoPlist.CFBundleShortVersionString, "MARKETING_VERSION");
   if (!bundleId) notAudited.push("Bundle identifier could not be resolved (it may come from an xcconfig file that isn't in the repo).");
   const syncedGroups = !!pbx?.includes("PBXFileSystemSynchronizedRootGroup");
-  const privacyManifests = walk(iosDir, { exts: [".xcprivacy"] }).filter((p) => !NON_APP_TARGET.test(rel(iosDir, p))).map((p) => {
+  const privacyManifests = walk(iosDir, { exts: [".xcprivacy"] }).filter((p) => !NON_APP_TARGET.test(rel(iosDir, p)) && inScope(p)).map((p) => {
     const raw = readText(p) ?? "";
     const data = parsePlist(Buffer.from(raw)) ?? {};
     const inBuild = !pbx ? void 0 : syncedGroups || pbx.includes(basename3(p));
@@ -15503,13 +15708,14 @@ function parseIosProject(root, iosDir, framework, opts = {}) {
   const linkedSdks = detectIosSdks(root, iosDir);
   for (const sdk of linkedSdks) {
     if (sdk.via !== "pod" || !sdk.filesAvailable || !sdk.hasPrivacyManifest) continue;
-    for (const p of walk(join8(iosDir, "Pods", sdk.name), { exts: [".xcprivacy"], skipDirs: /* @__PURE__ */ new Set() })) {
+    for (const p of walk(join9(iosDir, "Pods", sdk.name), { exts: [".xcprivacy"], skipDirs: /* @__PURE__ */ new Set() })) {
       const data = parsePlist(Buffer.from(readText(p) ?? "")) ?? {};
       privacyManifests.push({ path: rel(root, p), owner: sdk.name, data, inBuild: true });
     }
   }
-  const sources = walk(iosDir, { exts: SOURCE_EXTS });
+  const sources = walk(iosDir, { exts: SOURCE_EXTS }).filter(inScope);
   const usesProtectedResources = scanSources(root, sources, IOS_PROTECTED_RESOURCES.map((r) => ({ key: r.id, patterns: r.patterns })));
+  const uiWebView = scanSources(root, sources.filter((f) => !/\/Pods\//.test(f)), [{ key: "UIWebView", patterns: [/\bUIWebView\s*\(|:\s*UIWebView\b|\bUIWebView\s*\*|\[UIWebView\b/] }]).map((u) => u.evidence);
   const usesRequiredReasonApis = scanSources(root, sources, REQUIRED_REASON_CATEGORIES.map((c2) => ({ key: c2.key, patterns: c2.patterns })));
   for (const sdk of linkedSdks) {
     const sig = findSignatureByPub(sdk.name) ?? findSignatureByNpm(sdk.name);
@@ -15520,7 +15726,7 @@ function parseIosProject(root, iosDir, framework, opts = {}) {
     }
   }
   const code = collectAppCode(root, framework, { iosDir });
-  const texts = readSources(root, code.files);
+  const texts = readSources(root, code.files.filter((f) => !f.startsWith(iosDir) || inScope(f)));
   const crossTexts = texts.filter((t) => /\.(dart|[jt]sx?|mjs)$/.test(t.file));
   if (crossTexts.length) {
     for (const u of scanPatterns(crossTexts, Object.entries(IOS_RESOURCE_HINTS).map(([key, h]) => ({ key, patterns: h.crossPatterns })), "plugin")) {
@@ -15529,7 +15735,7 @@ function parseIosProject(root, iosDir, framework, opts = {}) {
       usesProtectedResources.push(u);
     }
   }
-  const projectDir = framework === "native" ? iosDir : dirname(iosDir);
+  const projectDir = framework === "native" ? iosDir : dirname2(iosDir);
   const allDeps = [...linkedSdks, ...framework === "native" ? [] : crossPlatformDeps(root, projectDir).filter((d) => !linkedSdks.some((l) => l.name === d.name))];
   const signals = scanSignals(texts, allDeps, { searched: code.searched, entitlements });
   if ((framework === "flutter" || framework === "react-native" || framework === "expo") && !crossTexts.length) {
@@ -15541,6 +15747,8 @@ function parseIosProject(root, iosDir, framework, opts = {}) {
   const mac = isMac && pbx && pbxPath ? macProjectFacts({ root, iosDir, pbx, pbxPath, bundleId, infoPlist, infoPlistPath: chosen ? rel(root, chosen) : void 0, linkedSdks, texts, distribution: opts.distribution }) : void 0;
   if (mac) entitlements = mac.entitlements;
   if (mac?.macos.distribution === "direct") notAudited.push(DIRECT_PROJECT_NOTE);
+  const hint = mac ? looksDirect(mac.macos) : void 0;
+  if (hint) notAudited.unshift(hint);
   if (mac?.macos.catalyst) notAudited.push("This is the Mac Catalyst build of an iPad app target; Mac App Store rules were run on its Mac settings (`[sdk=macosx*]` overrides).");
   return {
     platform: isMac ? "macos" : "ios",
@@ -15565,15 +15773,52 @@ function parseIosProject(root, iosDir, framework, opts = {}) {
       entitlements,
       usesRequiredReasonApis,
       usesProtectedResources,
-      pbxprojText: pbx
+      pbxprojText: pbx,
+      uiWebView,
+      deviceFamily: isMac ? void 0 : deviceFamily(target),
+      appIcon: isMac || framework === "expo" ? void 0 : appIcon(root, iosDir, target?.resolve(target.settings.ASSETCATALOG_COMPILER_APPICON_NAME), inScope)
     }
   };
+}
+function deviceFamily(target) {
+  if (!target) return void 0;
+  const sdk = target.resolve(target.settings.SDKROOT) ?? "";
+  if (/tvos|watchos|xros|macosx/.test(sdk)) return void 0;
+  const raw = target.resolve(target.settings.TARGETED_DEVICE_FAMILY);
+  const list2 = raw?.replace(/"/g, "").split(",").map((x) => Number(x.trim())).filter((n) => n > 0);
+  return list2?.length ? list2 : void 0;
+}
+function appIcon(root, iosDir, setName, inScope) {
+  const name = setName && !/\$[({]/.test(setName) ? setName.replace(/"/g, "") : "AppIcon";
+  const sets = walk(iosDir, { exts: ["Contents.json"], assets: true }).filter((p) => p.endsWith(`/${name}.appiconset/Contents.json`) && inScope(p) && !NON_APP_TARGET.test(rel(iosDir, p)));
+  if (sets.length !== 1) return void 0;
+  if (walk(iosDir, { exts: ["icon.json"] }).some((p) => p.endsWith(`/${name}.icon/icon.json`))) return void 0;
+  let json;
+  try {
+    json = JSON.parse(readText(sets[0]) ?? "");
+  } catch {
+    return void 0;
+  }
+  const store = (json.images ?? []).filter((i) => i.size === "1024x1024" && !i.appearances && (i.idiom === "ios-marketing" || i.idiom === "universal" && i.platform === "ios"));
+  if (!store.length) return (json.images ?? []).some((i) => i.idiom === "iphone" || i.idiom === "ipad" || i.platform === "ios") ? { name, problem: "missing", evidence: { file: rel(root, sets[0]), detail: "no 1024x1024 slot" } } : void 0;
+  const file = store.find((i) => i.filename)?.filename;
+  if (!file) return { name, problem: "missing", evidence: { file: rel(root, sets[0]), detail: "the 1024x1024 slot has no image" } };
+  const path = join9(dirname2(sets[0]), file);
+  if (!exists(path)) return void 0;
+  const head = readFileSync6(path);
+  if (head.length < 33 || head.readUInt32BE(0) !== 2303741511) return void 0;
+  const w = head.readUInt32BE(16);
+  const h = head.readUInt32BE(20);
+  const evidence = { file: rel(root, path) };
+  if (w !== 1024 || h !== 1024) return { name, problem: "size", size: `${w}\xD7${h}`, evidence: { ...evidence, detail: `${w}\xD7${h}` } };
+  const clear = transparentPixels(head);
+  return clear ? { name, problem: "alpha", evidence: { ...evidence, detail: `${clear} see-through pixels` } } : void 0;
 }
 function findPbxproj(dir) {
   const candidates = [];
   for (const name of safeList2(dir)) {
     if (name.endsWith(".xcodeproj") && name !== "Pods.xcodeproj") {
-      const p = join8(dir, name, "project.pbxproj");
+      const p = join9(dir, name, "project.pbxproj");
       if (exists(p)) candidates.push(p);
     }
   }
@@ -15608,8 +15853,8 @@ function detectIosSdks(root, iosDir) {
     seen.add(k);
     sdks.push(s);
   };
-  const podLock = join8(iosDir, "Podfile.lock");
-  const podsDir = join8(iosDir, "Pods");
+  const podLock = join9(iosDir, "Podfile.lock");
+  const podsDir = join9(iosDir, "Pods");
   const lockText = readText(podLock);
   if (lockText) {
     const podsSection = lockText.split(/\n(?=[A-Z ]+:\n)/)[0] ?? "";
@@ -15621,7 +15866,7 @@ function detectIosSdks(root, iosDir) {
       if (!rootNames.has(rootName)) rootNames.set(rootName, m[2]);
     }
     for (const [name, version2] of rootNames) {
-      const podDir = join8(podsDir, name);
+      const podDir = join9(podsDir, name);
       const filesAvailable = exists(podDir) && isDir2(podDir);
       add({
         id: findSignatureByPod(name)?.id ?? name,
@@ -15656,7 +15901,7 @@ function detectIosSdks(root, iosDir) {
     } catch {
     }
   }
-  const pkgJson = join8(dirname(iosDir), "package.json");
+  const pkgJson = join9(dirname2(iosDir), "package.json");
   const pkgText = iosDir !== root || exists(pkgJson) ? readText(pkgJson) : void 0;
   if (pkgText) {
     try {
@@ -15669,7 +15914,7 @@ function detectIosSdks(root, iosDir) {
     } catch {
     }
   }
-  const pubLock = join8(dirname(iosDir), "pubspec.lock");
+  const pubLock = join9(dirname2(iosDir), "pubspec.lock");
   const pubText = readText(pubLock);
   if (pubText) {
     const re = /^ {2}([a-z0-9_]+):\n(?:\s{4}.*\n)*?\s{4}version: "([^"]+)"/gm;
@@ -15683,15 +15928,15 @@ function detectIosSdks(root, iosDir) {
 }
 function findPackageResolved(iosDir) {
   const out = [];
-  const direct = join8(iosDir, "Package.resolved");
+  const direct = join9(iosDir, "Package.resolved");
   if (exists(direct)) out.push(direct);
   for (const name of safeList2(iosDir)) {
     if (name.endsWith(".xcworkspace")) {
-      const p = join8(iosDir, name, "xcshareddata", "swiftpm", "Package.resolved");
+      const p = join9(iosDir, name, "xcshareddata", "swiftpm", "Package.resolved");
       if (exists(p)) out.push(p);
     }
     if (name.endsWith(".xcodeproj")) {
-      const p = join8(iosDir, name, "project.xcworkspace", "xcshareddata", "swiftpm", "Package.resolved");
+      const p = join9(iosDir, name, "project.xcworkspace", "xcshareddata", "swiftpm", "Package.resolved");
       if (exists(p)) out.push(p);
     }
   }
@@ -15707,7 +15952,7 @@ function isDir2(p) {
 function frameworkEvidenceFor(root, framework) {
   if (framework === "flutter") return { file: "pubspec.yaml", detail: "Flutter project (pubspec.yaml)" };
   if (framework === "react-native") return { file: "package.json", detail: "react-native dependency" };
-  if (framework === "expo") return { file: exists(join8(root, "app.json")) ? "app.json" : "package.json", detail: "Expo project" };
+  if (framework === "expo") return { file: exists(join9(root, "app.json")) ? "app.json" : "package.json", detail: "Expo project" };
   return void 0;
 }
 function minLoadAlignment(b) {
@@ -15764,7 +16009,18 @@ function manifestFromTree(root) {
   facts.packageName = str3(manifest.attrs.package);
   facts.versionName = str3(a(manifest, "versionName"));
   const visit = (n, inApp) => {
+    if (/^(?:activity|activity-alias|service|receiver)$/.test(n.tag) && inApp && n.attrs["tools:node"] !== "remove") {
+      const name = str3(a(n, "name")) ?? n.tag;
+      if (a(n, "exported") === void 0 && n.children.some((c2) => c2.tag === "intent-filter")) (facts.missingExported ??= []).push(name);
+      const bound = str3(a(n, "permission"));
+      if (n.tag === "service" && bound && /\.BIND_(?:ACCESSIBILITY|VPN)_SERVICE$/.test(bound)) (facts.boundServices ??= []).push({ name, permission: bound });
+    }
     switch (n.tag) {
+      case "application": {
+        const d = a(n, "debuggable");
+        if (d === true || d === "true") facts.debuggable = true;
+        break;
+      }
       case "uses-sdk": {
         facts.usesSdk = { minSdk: num(a(n, "minSdkVersion")), targetSdk: num(a(n, "targetSdkVersion")) };
         break;
@@ -15968,7 +16224,7 @@ function parseAndroidProject(root, androidDir, framework, moduleDirArg) {
   const notAudited = [];
   const moduleDir = moduleDirArg ?? findAppModules(androidDir)[0];
   if (!moduleDir) throw new Error(`No Android application module (com.android.application) found in ${androidDir}`);
-  const gradleFile = ["build.gradle.kts", "build.gradle"].map((f) => join9(moduleDir, f)).find(exists);
+  const gradleFile = ["build.gradle.kts", "build.gradle"].map((f) => join10(moduleDir, f)).find(exists);
   const segments = withAppliedScripts(gradleFile, moduleDir);
   const gradle = segments.map((x) => x.text).join("\n");
   const where = (index) => {
@@ -15979,8 +16235,8 @@ function parseAndroidProject(root, androidDir, framework, moduleDirArg) {
   };
   const catalog = readCatalog(androidDir);
   const props = readGradleProps(androidDir);
-  const rootGradle = ["build.gradle.kts", "build.gradle"].map((f) => readText(join9(androidDir, f))).find(Boolean) ?? "";
-  const manifestPath = join9(moduleDir, "src", "main", "AndroidManifest.xml");
+  const rootGradle = ["build.gradle.kts", "build.gradle"].map((f) => readText(join10(androidDir, f))).find(Boolean) ?? "";
+  const manifestPath = join10(moduleDir, "src", "main", "AndroidManifest.xml");
   const manifestText = readText(manifestPath);
   const manifest = manifestText ? manifestFromTree(parseManifestXml(manifestText)) : { permissions: [], features: [], services: [], metaData: {}, launcherCategories: [] };
   if (!manifestText) notAudited.push("No src/main/AndroidManifest.xml found in the app module.");
@@ -15989,7 +16245,7 @@ function parseAndroidProject(root, androidDir, framework, moduleDirArg) {
   const localModules = collectLocalModules(gradle, androidDir);
   const moduleSegments = [];
   for (const mod of localModules) {
-    const libManifestPath = join9(mod, "src", "main", "AndroidManifest.xml");
+    const libManifestPath = join10(mod, "src", "main", "AndroidManifest.xml");
     const libText = readText(libManifestPath);
     if (libText) {
       const lib = manifestFromTree(parseManifestXml(libText));
@@ -16002,7 +16258,7 @@ function parseAndroidProject(root, androidDir, framework, moduleDirArg) {
       manifest.features.push(...lib.features);
       manifest.metaData = { ...lib.metaData, ...manifest.metaData };
     }
-    const g = ["build.gradle.kts", "build.gradle"].map((f) => join9(mod, f)).find(exists);
+    const g = ["build.gradle.kts", "build.gradle"].map((f) => join10(mod, f)).find(exists);
     if (g) moduleSegments.push({ file: g, text: readText(g) ?? "", offset: 0 });
   }
   notAudited.push(
@@ -16010,8 +16266,10 @@ function parseAndroidProject(root, androidDir, framework, moduleDirArg) {
   );
   const target = resolveSdkLevel(gradle, "targetSdk", catalog, props, rootGradle);
   const min = resolveSdkLevel(gradle, "minSdk", catalog, props, rootGradle);
-  let targetSdk = target.value ?? manifest.usesSdk?.targetSdk;
-  let targetSdkSource = target.value ? { ...where(target.index), detail: target.raw } : manifest.usesSdk?.targetSdk ? { file: rel(root, manifestPath), detail: "uses-sdk targetSdkVersion" } : void 0;
+  const convention = target.value === void 0 && !target.raw ? conventionSdkLevel(androidDir, "targetSdk", catalog) : void 0;
+  const flutterDefault = /^flutter\./.test(target.raw ?? "") ? flutterSdkLevel(androidDir, "targetSdk") : void 0;
+  let targetSdk = target.value ?? convention?.value ?? flutterDefault ?? manifest.usesSdk?.targetSdk;
+  let targetSdkSource = convention ? { file: rel(root, convention.file), line: convention.line, detail: `targetSdk ${convention.value}` } : target.value || flutterDefault ? { ...where(target.index), detail: flutterDefault ? `${target.raw} (${flutterDefault} in the installed Flutter SDK)` : target.raw } : manifest.usesSdk?.targetSdk ? { file: rel(root, manifestPath), detail: "uses-sdk targetSdkVersion" } : void 0;
   if (targetSdk === void 0) {
     notAudited.push(
       target.raw ? `targetSdk is set indirectly (${target.raw}) and could not be resolved. Scan the built APK to check it.` : "targetSdk could not be found in the app module build file."
@@ -16033,25 +16291,25 @@ function parseAndroidProject(root, androidDir, framework, moduleDirArg) {
   }));
   linkedSdks.push(...crossPlatformSdks(root, root));
   const billing = deps.find((d) => d.coord === "com.android.billingclient:billing" || d.coord === "com.android.billingclient:billing-ktx");
-  const sources = [moduleDir, ...localModules].flatMap((m) => walk(join9(m, "src"), { exts: [".kt", ".java"] }));
+  const sources = [moduleDir, ...localModules].flatMap((m) => walk(join10(m, "src"), { exts: [".kt", ".java"] })).filter((f) => !TEST_SRC.test(f));
   const startForegroundClasses = [];
   for (const f of sources) {
     const t = readText(f);
     if (t && /\bstartForeground\s*\(/.test(t)) startForegroundClasses.push(basename4(f).replace(/\.(kt|java)$/, ""));
   }
-  const code = collectAppCode(root, framework, { androidSrcDirs: [moduleDir, ...localModules].map((m) => join9(m, "src")) });
+  const code = collectAppCode(root, framework, { androidSrcDirs: [moduleDir, ...localModules].map((m) => join10(m, "src")) });
   const texts = readSources(root, code.files);
   const crossDeps = framework === "native" ? [] : crossPlatformDeps(root, root);
   const allDeps = [...linkedSdks, ...crossDeps.filter((d) => !linkedSdks.some((l) => l.name === d.name))];
   const signals = scanSignals(texts, allDeps, { searched: code.searched });
   const permissionUsage = texts.length ? findPermissionUsage(manifest.permissions, texts, allDeps) : void 0;
   const nativeLibs = [];
-  const jni = join9(moduleDir, "src", "main", "jniLibs");
+  const jni = join10(moduleDir, "src", "main", "jniLibs");
   for (const so of exists(jni) ? walk(jni, { exts: [".so"], maxSize: 512 * 1024 * 1024 }) : []) {
-    const abi = basename4(dirname2(so));
+    const abi = basename4(dirname3(so));
     let minAlign;
     try {
-      minAlign = minLoadAlignment(readFileSync6(so));
+      minAlign = minLoadAlignment(readFileSync7(so));
     } catch {
     }
     nativeLibs.push({ path: rel(root, so), abi, minLoadAlign: minAlign });
@@ -16073,6 +16331,7 @@ function parseAndroidProject(root, androidDir, framework, moduleDirArg) {
       manifestPath: manifestText ? rel(root, manifestPath) : void 0,
       targetSdk,
       targetSdkSource,
+      targetSdkFromFlutter: targetSdk === void 0 && /^flutter\./.test(target.raw ?? "") ? true : void 0,
       minSdk: min.value ?? manifest.usesSdk?.minSdk,
       formFactor: formFactorOf(manifest),
       permissions: manifest.permissions,
@@ -16088,25 +16347,30 @@ function parseAndroidProject(root, androidDir, framework, moduleDirArg) {
   };
 }
 var APP_PLUGIN = /(com\.android\.application|plugins\.android\.application|android\.application)/;
+var BUILD_LOGIC = /^(?:buildSrc|build-?(?:logic|plugins?|conventions?|tools?)|gradle-?plugins?|convention(?:-plugins?)?|plugins?)$/i;
 function isAppModule(dir) {
+  if (BUILD_LOGIC.test(basename4(dir))) return false;
   for (const f of ["build.gradle.kts", "build.gradle"]) {
-    const t = readText(join9(dir, f));
+    const t = readText(join10(dir, f));
     if (!t) continue;
     for (const line of t.split("\n")) {
       if (APP_PLUGIN.test(line) && !/apply\s*\(?\s*false/.test(line) && !/^\s*\/\//.test(line)) return true;
     }
+    if (/^\s*applicationId\s*(?:=|\(|\s)\s*["']/m.test(t) && /\bandroid\s*\{|\bandroidComponents\b/.test(t)) return true;
   }
   return false;
 }
 function findAppModules(androidDir) {
   if (isAppModule(androidDir)) return [androidDir];
   const dirs = /* @__PURE__ */ new Set();
-  const settings = ["settings.gradle.kts", "settings.gradle"].map((f) => readText(join9(androidDir, f))).find(Boolean) ?? "";
-  for (const m of settings.matchAll(/["']:([\w\-:.]+)["']/g)) dirs.add(join9(androidDir, ...m[1].split(":")));
+  const settings = ["settings.gradle.kts", "settings.gradle"].map((f) => readText(join10(androidDir, f))).find(Boolean) ?? "";
+  for (const m of settings.matchAll(/["']:([\w\-:.]+)["']/g)) dirs.add(join10(androidDir, ...m[1].split(":")));
   for (const name of safeList3(androidDir)) {
-    if (!name.startsWith(".") && name !== "build" && name !== "gradle") dirs.add(join9(androidDir, name));
+    if (!name.startsWith(".") && name !== "build" && name !== "gradle") dirs.add(join10(androidDir, name));
   }
-  const apps = [...dirs].filter((d) => isDir3(d) && isAppModule(d));
+  let apps = [...dirs].filter((d) => isDir3(d) && isAppModule(d));
+  const real = apps.filter((d) => !/(?:^|[/_-])(?:demos?|samples?|examples?|playground|catalog|benchmarks?|\w*tests?)(?=$|[/_-])/i.test(rel(androidDir, d)));
+  if (real.length) apps = real;
   apps.sort((a, b) => basename4(a) === "app" ? -1 : basename4(b) === "app" ? 1 : a.localeCompare(b));
   return apps;
 }
@@ -16116,10 +16380,10 @@ function collectLocalModules(appGradle, androidDir) {
   while (queue.length && found.size < 300) {
     const text = queue.shift();
     for (const m of text.matchAll(/project\s*\(\s*(?:path\s*[:=]\s*)?["']:([\w\-:.]+)["']\s*\)/g)) {
-      const dir = join9(androidDir, ...m[1].split(":"));
+      const dir = join10(androidDir, ...m[1].split(":"));
       if (found.has(dir) || !isDir3(dir)) continue;
       found.add(dir);
-      const g = ["build.gradle.kts", "build.gradle"].map((f) => readText(join9(dir, f))).find(Boolean);
+      const g = ["build.gradle.kts", "build.gradle"].map((f) => readText(join10(dir, f))).find(Boolean);
       if (g) queue.push(g);
     }
   }
@@ -16130,7 +16394,7 @@ function withAppliedScripts(gradleFile, moduleDir) {
   const segs = [{ file: gradleFile, text: main2, offset: 0 }];
   let offset = main2.length + 1;
   for (const m of main2.matchAll(/apply\s*\(?\s*from\s*[:=]\s*["']([^"']+\.gradle(?:\.kts)?)["']/g)) {
-    const file = join9(moduleDir, m[1]);
+    const file = join10(moduleDir, m[1]);
     const text = readText(file);
     if (!text) continue;
     segs.push({ file, text, offset });
@@ -16140,7 +16404,7 @@ function withAppliedScripts(gradleFile, moduleDir) {
 }
 function readCatalog(androidDir) {
   const out = { versions: {}, libraries: {} };
-  const text = readText(join9(androidDir, "gradle", "libs.versions.toml"));
+  const text = readText(join10(androidDir, "gradle", "libs.versions.toml"));
   if (!text) return out;
   let section = "";
   for (const rawLine of text.split("\n")) {
@@ -16178,12 +16442,48 @@ function readCatalog(androidDir) {
 var normAlias = (k) => k.replace(/[-_]/g, ".").toLowerCase();
 function readGradleProps(androidDir) {
   const out = {};
-  const text = readText(join9(androidDir, "gradle.properties")) ?? "";
+  const text = readText(join10(androidDir, "gradle.properties")) ?? "";
   for (const line of text.split("\n")) {
     const m = line.match(/^\s*([\w.]+)\s*=\s*(.+?)\s*$/);
     if (m) out[m[1]] = m[2];
   }
   return out;
+}
+function conventionSdkLevel(androidDir, name, catalog) {
+  const files = safeList3(androidDir).filter((d) => BUILD_LOGIC.test(d) && isDir3(join10(androidDir, d))).flatMap((d) => walk(join10(androidDir, d), { exts: [".kt", ".kts", ".gradle", ".java"], skipDirs: /* @__PURE__ */ new Set(["build", ".gradle", ".git"]) }));
+  const texts = files.map((f) => ({ file: f, text: readText(f) ?? "" }));
+  const found = [];
+  for (const { file, text } of texts) {
+    if (/test|benchmark|baselineprofile|sample|lint/i.test(basename4(file))) continue;
+    for (const m of text.matchAll(new RegExp(`\\b${name}(?:Version)?\\s*(?:=|\\(|\\.set\\()\\s*([^\\n)}]+)`, "g"))) {
+      const raw = m[1].trim();
+      let value = /^\d+$/.test(raw) ? +raw : void 0;
+      const lib = raw.match(/libs\.versions\.([\w.]+?)\.get|findVersion\(\s*"([\w.-]+)"/);
+      if (value === void 0 && lib) {
+        const want = normAlias(lib[1] ?? lib[2]);
+        const key = Object.keys(catalog.versions).find((k) => normAlias(k) === want);
+        if (key) value = parseInt(catalog.versions[key], 10);
+      }
+      const ident = raw.match(/^(?:\w+\.)*([A-Za-z_]\w*)$/)?.[1];
+      if (value === void 0 && ident) {
+        const all = new Set(texts.flatMap((t) => [...t.text.matchAll(new RegExp(`\\b${ident}\\b\\s*(?::\\s*Int\\s*)?=\\s*(\\d+)\\b`, "g"))].map((x) => +x[1])));
+        if (all.size === 1) value = [...all][0];
+      }
+      if (value !== void 0 && Number.isFinite(value)) found.push({ value, file, line: lineOf(text, m.index) });
+    }
+  }
+  return new Set(found.map((f) => f.value)).size === 1 ? found[0] : void 0;
+}
+function flutterSdkLevel(androidRoot, name) {
+  const local = readText(join10(androidRoot, "local.properties"));
+  const sdk = local?.match(/^\s*flutter\.sdk\s*=\s*(.+?)\s*$/m)?.[1]?.replace(/\\(.)/g, "$1");
+  if (!sdk) return void 0;
+  const dir = join10(sdk, "packages", "flutter_tools", "gradle", "src", "main");
+  for (const f of ["kotlin/FlutterExtension.kt", "groovy/FlutterExtension.groovy", "groovy/flutter.groovy"]) {
+    const v = readText(join10(dir, f))?.match(new RegExp(`\\b${name}Version\\b\\s*(?::\\s*Int\\s*)?=\\s*(\\d+)`))?.[1];
+    if (v) return +v;
+  }
+  return void 0;
 }
 function resolveSdkLevel(gradle, name, catalog, props, rootGradle) {
   const re = new RegExp(`\\b${name}(?:Version)?\\b\\s*(?:=|\\()?\\s*([^\\n]+)`, "g");
@@ -16236,24 +16536,24 @@ function gradleDependencies(gradle, catalog) {
 }
 function crossPlatformSdks(root, projectDir) {
   const out = [];
-  const pkgText = readText(join9(projectDir, "package.json"));
+  const pkgText = readText(join10(projectDir, "package.json"));
   if (pkgText) {
     try {
       const pkg = JSON.parse(pkgText);
       for (const [name, version2] of Object.entries(pkg.dependencies ?? {})) {
         const sig = findSignatureByNpm(name);
-        if (sig) out.push({ id: sig.id, name, via: "npm", version: version2, evidence: { file: rel(root, join9(projectDir, "package.json")), detail: `${name}@${version2}` }, filesAvailable: false });
+        if (sig) out.push({ id: sig.id, name, via: "npm", version: version2, evidence: { file: rel(root, join10(projectDir, "package.json")), detail: `${name}@${version2}` }, filesAvailable: false });
       }
     } catch {
     }
   }
-  const pub = readText(join9(projectDir, "pubspec.lock"));
+  const pub = readText(join10(projectDir, "pubspec.lock"));
   if (pub) {
     const re = /^ {2}([a-z0-9_]+):\n(?:\s{4}.*\n)*?\s{4}version: "([^"]+)"/gm;
     let m;
     while (m = re.exec(pub)) {
       const sig = findSignatureByPub(m[1]);
-      if (sig) out.push({ id: sig.id, name: m[1], via: "pub", version: m[2], evidence: { file: rel(root, join9(projectDir, "pubspec.lock")), detail: `${m[1]} (${m[2]})` }, filesAvailable: false });
+      if (sig) out.push({ id: sig.id, name: m[1], via: "pub", version: m[2], evidence: { file: rel(root, join10(projectDir, "pubspec.lock")), detail: `${m[1]} (${m[2]})` }, filesAvailable: false });
     }
   }
   return out;
@@ -16370,6 +16670,27 @@ function parseIpa(path, zip = ZipArchive.fromFile(path)) {
   } else {
     notAudited.push("Main executable not found in the IPA; code usage was not scanned.");
   }
+  const uiWebView = [];
+  const simulatorCode = [];
+  const binaries = [exeEntry, ...[...fwNames].map((n) => zip.get(`${appDir}Frameworks/${n}.framework/${n}`))].filter((e) => !!e);
+  for (const e of binaries) {
+    const bin = zip.read(e);
+    const sim = machOArchs(bin).filter((x) => x === "x86_64" || x === "x86");
+    if (sim.length) simulatorCode.push({ file: e.name, detail: `contains ${sim.join(" and ")}` });
+    if (bin.indexOf("_OBJC_CLASS_$_UIWebView\0", 0, "latin1") >= 0) uiWebView.push({ file: e.name, detail: "binary references UIWebView" });
+  }
+  let debuggable = entitlements["get-task-allow"] === true ? { file: exeEntry?.name, detail: "get-task-allow = true" } : void 0;
+  let provisionedDevices;
+  const profileEntry = zip.get(`${appDir}embedded.mobileprovision`);
+  if (profileEntry) {
+    const raw = zip.read(profileEntry);
+    const start = raw.indexOf("<?xml", 0, "latin1");
+    const end = raw.indexOf("</plist>", start, "latin1");
+    const profile = start >= 0 && end > start ? parsePlist(Buffer.from(raw.subarray(start, end + 8))) : void 0;
+    const ent = profile?.Entitlements;
+    if (ent?.["get-task-allow"] === true) debuggable ??= { file: profileEntry.name, detail: "get-task-allow = true" };
+    if (Array.isArray(profile?.ProvisionedDevices)) provisionedDevices = { file: profileEntry.name, detail: `profile lists ${profile.ProvisionedDevices.length} test devices` };
+  }
   const jsBundle = zip.get(`${appDir}main.jsbundle`);
   const expoMarker = [`${appDir}EXConstants.bundle/app.config`, `${appDir}Expo.plist`, `${appDir}EXUpdates.bundle/app.manifest`].find((n) => zip.has(n));
   let framework = "native";
@@ -16420,7 +16741,10 @@ function parseIpa(path, zip = ZipArchive.fromFile(path)) {
       linkedSdks,
       entitlements,
       usesRequiredReasonApis,
-      usesProtectedResources
+      usesProtectedResources,
+      deviceFamily: Array.isArray(infoPlist.UIDeviceFamily) ? infoPlist.UIDeviceFamily.map(Number) : void 0,
+      uiWebView,
+      build: { simulatorCode, debuggable, provisionedDevices }
     }
   };
 }
@@ -16856,7 +17180,7 @@ var EXPO_PLUGINS = {
 };
 function readExpoConfig(root) {
   for (const name of [".okayed/expo-config.json", "app.json"]) {
-    const file = join10(root, name);
+    const file = join11(root, name);
     const text = readText(file);
     if (!text) continue;
     try {
@@ -16872,7 +17196,7 @@ function parseExpoProject(root, platforms) {
   const cfg = read?.config ?? {};
   const cfgFile = read?.file ?? "package.json";
   const where = (needle) => ({ file: cfgFile, line: read && read.text.includes(needle) ? lineOf(read.text, read.text.indexOf(needle)) : void 0 });
-  const hasDynamicConfig = ["app.config.js", "app.config.ts", "app.config.mjs", "app.config.cjs"].find((f) => exists(join10(root, f)));
+  const hasDynamicConfig = ["app.config.js", "app.config.ts", "app.config.mjs", "app.config.cjs"].find((f) => exists(join11(root, f)));
   const baseNotes = [
     "Expo managed project: native files are generated at prebuild. Results come from app.json, its config plugins, package.json and your JS/TS code; scan the built .ipa / .aab for the final word."
   ];
@@ -17005,7 +17329,7 @@ function parseInput(input, opts = {}) {
   if (!exists(path)) throw new Error(`Path not found: ${input}`);
   const st = statSync5(path);
   const lower = path.toLowerCase();
-  const distribution = opts.distribution ?? readDistributionConfig(st.isFile() ? dirname3(path) : path);
+  const distribution = opts.distribution ?? readDistributionConfig(st.isFile() ? dirname4(path) : path);
   if (st.isFile()) {
     if (lower.endsWith(".ipa")) return [parseIpa(path)];
     if (lower.endsWith(".apk")) return [parseApk(path)];
@@ -17014,9 +17338,14 @@ function parseInput(input, opts = {}) {
     if (lower.endsWith(".zip")) return [parseZip(path, distribution)];
     throw new Error(`Unsupported file type: ${input}. Pass a project folder, .ipa, .apk, .aab, a macOS .app (or .zip of one) or .pkg.`);
   }
-  if (/\.app\/?$/.test(lower) && exists(join11(path, "Contents", "Info.plist"))) {
-    const fs = new DirBundleFS(dirname3(path), path);
+  if (/\.app\/?$/.test(lower) && exists(join12(path, "Contents", "Info.plist"))) {
+    const fs = new DirBundleFS(dirname4(path), path);
     return [parseMacApp(fs, findAppBundles(fs)[0] ?? path.split("/").pop(), { root: path, inputKind: "mac-app", distribution })];
+  }
+  if (!findIosDir(path) && !findAndroidDir(path) && detectFramework(path) === "native" && !exists(join12(path, "project.yml"))) {
+    const apps = findApps(path);
+    if (apps.length === 1) return parseInput(apps[0], opts);
+    if (apps.length > 1) throw new Error(`Found ${apps.length} apps in ${input}. Pass the one to scan: ${apps.slice(0, 8).map((a) => join12(input, relative2(path, a))).join(", ")}${apps.length > 8 ? ", \u2026" : ""}`);
   }
   const framework = detectFramework(path);
   const results = [];
@@ -17032,7 +17361,7 @@ function parseInput(input, opts = {}) {
     }
     if (!results.length && opts.platform === "macos") throw new Error(`The Xcode project in ${input} has no macOS app target.`);
   }
-  const macDir = framework !== "native" ? [join11(path, "macos"), join11(path, "macOS")].find(hasXcodeproj) : void 0;
+  const macDir = framework !== "native" ? [join12(path, "macos"), join12(path, "macOS")].find(hasXcodeproj) : void 0;
   if (wantMac && macDir && macDir !== iosDir) results.push(parseIosProject(path, macDir, framework, { as: "macos", distribution }));
   const androidDir = findAndroidDir(path);
   if (wantAndroid && androidDir) {
@@ -17046,14 +17375,18 @@ function parseInput(input, opts = {}) {
     if (framework === "expo") {
       throw new Error("This looks like an Expo project, but no app.json was found. Add app.json, run `npx expo prebuild`, or scan the built .ipa/.aab.");
     }
+    if (exists(join12(path, "project.yml")) || list(path).some((n) => /^project.*\.ya?ml$/.test(n)) || exists(join12(path, "Project.swift"))) {
+      const tuist = exists(join12(path, "Project.swift"));
+      throw new Error(`This project makes its .xcodeproj with ${tuist ? "Tuist" : "XcodeGen"}. Run \`${tuist ? "tuist generate --no-open" : "xcodegen generate"}\` first, then scan again (in CI, add it as a step before Okayed).`);
+    }
     throw new Error(`No iOS/macOS (.xcodeproj) or Android (com.android.application) project found in ${input}.`);
   }
   return results;
 }
 function detectFramework(dir) {
-  const pubspec = readText(join11(dir, "pubspec.yaml"));
+  const pubspec = readText(join12(dir, "pubspec.yaml"));
   if (pubspec && /^\s+sdk:\s*flutter\b/m.test(pubspec)) return "flutter";
-  const pkgText = readText(join11(dir, "package.json"));
+  const pkgText = readText(join12(dir, "package.json"));
   let deps = {};
   if (pkgText) {
     try {
@@ -17065,25 +17398,45 @@ function detectFramework(dir) {
     }
   }
   if (deps.expo) return "expo";
-  const appJson = readText(join11(dir, "app.json"));
+  const appJson = readText(join12(dir, "app.json"));
   if (appJson && /^\s*\{\s*"expo"\s*:/.test(appJson) && (deps["react-native"] || readExpoConfig(dir))) return "expo";
   if (deps["react-native"]) return "react-native";
   if (pubspec) return "flutter";
   return "native";
 }
+function findApps(root) {
+  const found = [];
+  let level = [root];
+  for (let depth = 0; depth < 3 && level.length; depth++) {
+    const next = [];
+    for (const dir of level) {
+      for (const name of list(dir).sort()) {
+        if (name.startsWith(".") || VENDOR_DIRS.has(name) || /^(?:examples?|samples?|demos?|tests?|e2e|docs?|fixtures?|templates?|third[_-]?party)$/i.test(name)) continue;
+        const d = join12(dir, name);
+        if (!isDir4(d)) continue;
+        const fw = detectFramework(d);
+        if (fw !== "native" ? findIosDir(d) || findAndroidDir(d) || fw === "expo" && readExpoConfig(d) : hasXcodeproj(d) || findAndroidDir(d)) found.push(d);
+        else next.push(d);
+      }
+    }
+    if (found.length) return found;
+    level = next.slice(0, 400);
+  }
+  return found;
+}
 function findIosDir(root) {
-  for (const dir of [root, join11(root, "ios"), join11(root, "iOS")]) {
+  for (const dir of [root, join12(root, "ios"), join12(root, "iOS")]) {
     if (hasXcodeproj(dir)) return dir;
   }
   for (const name of list(root)) {
-    const d = join11(root, name);
+    const d = join12(root, name);
     if (!name.startsWith(".") && name !== "node_modules" && name !== "Pods" && isDir4(d) && hasXcodeproj(d)) return d;
   }
   return void 0;
 }
 function findPbx(dir) {
   for (const n of list(dir)) if (n.endsWith(".xcodeproj") && n !== "Pods.xcodeproj") {
-    const t = readText(join11(dir, n, "project.pbxproj"));
+    const t = readText(join12(dir, n, "project.pbxproj"));
     if (t) return t;
   }
   return void 0;
@@ -17099,8 +17452,8 @@ function hasXcodeproj(dir) {
   return list(dir).some((n) => n.endsWith(".xcodeproj") && n !== "Pods.xcodeproj");
 }
 function findAndroidDir(root) {
-  for (const dir of [root, join11(root, "android")]) {
-    if ((exists(join11(dir, "settings.gradle")) || exists(join11(dir, "settings.gradle.kts")) || exists(join11(dir, "build.gradle")) || exists(join11(dir, "build.gradle.kts"))) && findAppModules(dir).length) {
+  for (const dir of [root, join12(root, "android")]) {
+    if ((exists(join12(dir, "settings.gradle")) || exists(join12(dir, "settings.gradle.kts")) || exists(join12(dir, "build.gradle")) || exists(join12(dir, "build.gradle.kts"))) && findAppModules(dir).length) {
       return dir;
     }
   }
@@ -17120,10 +17473,59 @@ function isDir4(p) {
     return false;
   }
 }
+function unreadable(facts) {
+  const out = [];
+  const project = facts.inputKind === "xcode-project" || facts.inputKind === "android-project";
+  if (facts.inputKind === "expo-config" && !(facts.ios ? facts.ios.infoPlistPath : facts.android?.manifestPath))
+    out.push("app.config.js/ts (purpose strings, permissions and SDK versions weren't checked). Run `npx expo config --json > .okayed/expo-config.json` and scan again");
+  if (facts.ios) {
+    if (facts.inputKind !== "expo-config" && !Object.keys(facts.ios.infoPlist).length) out.push("the app's Info.plist (purpose strings, background modes and export compliance weren't checked)");
+    if (!facts.bundleId && facts.inputKind !== "expo-config") out.push("the bundle identifier (the wrong target may have been scanned)");
+    else if (facts.bundleId && /\b(?:ui)?tests?$/i.test(facts.bundleId)) out.push(`the app target (found ${facts.bundleId}, which looks like a test target)`);
+  }
+  if (facts.android && facts.inputKind === "android-project") {
+    if (facts.android.targetSdk === void 0 && !facts.android.targetSdkFromFlutter) out.push("targetSdk (the Google Play target API rule couldn't run)");
+    if (!facts.android.manifestPath && !facts.android.manifest.packageName && !facts.android.permissions.length) out.push("AndroidManifest.xml (permissions and services weren't checked)");
+  }
+  if (project && facts.signals && !facts.signals.codeScanned) out.push("app source code (account, login, purchase and AI rules couldn't run)");
+  if (facts.macos?.builtBinary && facts.macos.code[0]?.signed === false) out.push("the app's entitlements (it isn't code-signed)");
+  return out;
+}
+var SCAN_001 = {
+  id: "SCAN-001",
+  platform: "all",
+  distribution: "any",
+  title: "Some checks couldn't run",
+  guideline: "Okayed scan coverage",
+  severity: "warning",
+  confidence: "certain",
+  fix: "Scan the folder that holds the .xcodeproj or Gradle settings, or scan the built app (.ipa, .apk, .aab, Mac .app/.pkg), which always contains the final values. If the project uses an unusual setup, please report it so Okayed can read it.",
+  sourceUrl: "https://github.com/useokayed/action#readme",
+  lastVerified: "2026-11-25",
+  check(facts) {
+    const list2 = unreadable(facts);
+    if (!list2.length) {
+      if (!facts.android?.targetSdkFromFlutter) return [];
+      return [{
+        severity: "info",
+        confidence: "certain",
+        message: "targetSdk is your Flutter SDK's default (flutter.targetSdkVersion), so the Google Play target API rule couldn't run here. Run `flutter pub get` first or scan the .aab to check it.",
+        evidence: facts.android.manifestPath ? [{ file: facts.android.manifestPath }] : []
+      }];
+    }
+    return [{
+      severity: "warning",
+      confidence: "certain",
+      message: `Okayed couldn't read ${list2.join("; ")}. Treat this result as incomplete: a clean score here doesn't mean the app was fully checked.`,
+      evidence: []
+    }];
+  }
+};
 var VERIFIED = "2026-11-22";
 var VERIFIED_P8 = "2026-11-23";
 var VERIFIED_P9 = "2026-11-23";
 var VERIFIED_P10 = "2026-11-23";
+var VERIFIED_P11 = "2026-11-25";
 var GUIDELINES_URL = "https://developer.apple.com/app-store/review/guidelines/";
 function shortPath(p) {
   const i = p.indexOf(".app/Contents/");
@@ -17133,6 +17535,9 @@ function names(list2, max = 3) {
   const u = [...new Set(list2)];
   if (u.length <= max) return u.length > 1 ? `${u.slice(0, -1).join(", ")} and ${u[u.length - 1]}` : u[0] ?? "";
   return `${u.slice(0, max).join(", ")} and ${u.length - max} more`;
+}
+function plural(n, word, pluralWord = word + "s") {
+  return `${n} ${n === 1 ? word : pluralWord}`;
 }
 function limit(arr, n = 5) {
   return arr.slice(0, n);
@@ -17145,6 +17550,202 @@ function majorOf(version2) {
   const m = version2.match(/^\D*(\d+)/);
   return m ? parseInt(m[1], 10) : NaN;
 }
+var SEC_001 = {
+  id: "SEC-001",
+  platform: "all",
+  distribution: "any",
+  title: "Secret key inside the app",
+  guideline: "Apple 1.6 Data Security / Play: User Data",
+  severity: "warning",
+  confidence: "likely",
+  fix: "Treat the key as leaked: revoke it and make a new one. Keep the new key on a server you control and have the app call that server (for AI and payment APIs too). Only publishable keys belong in an app.",
+  sourceUrl: "https://developer.apple.com/app-store/review/guidelines/#data-security",
+  lastVerified: VERIFIED_P11,
+  check(facts) {
+    const found = facts.signals?.secrets ?? [];
+    if (!found.length) return [];
+    return [{
+      severity: "warning",
+      confidence: "likely",
+      message: `The app contains what looks like a ${names(found.map((s) => s.name))}. Anyone who downloads the app can extract it and use it at your cost, or read your users' data.`,
+      evidence: limit(found.map((s) => s.evidence))
+    }];
+  }
+};
+var ORIENTATIONS = ["Portrait", "PortraitUpsideDown", "LandscapeLeft", "LandscapeRight"].map((o) => `UIInterfaceOrientation${o}`);
+var IOS_PLIST_001 = {
+  id: "IOS-PLIST-001",
+  platform: "ios",
+  title: "Info.plist value App Store Connect rejects",
+  guideline: "App Store Connect upload validation",
+  storeCodes: ["ITMS-90060", "ITMS-90474", "ITMS-90475", "ITMS-90713"],
+  severity: "blocker",
+  confidence: "certain",
+  fix: `Version: use one to three numbers (1.4.2) and keep words like "beta" for the build notes. iPad: support all four orientations, or set "Requires full screen" if the app truly can't rotate. Launch screen: add a launch storyboard or UILaunchScreen. Icon: put the app icon in an asset catalog so CFBundleIconName is written.`,
+  sourceUrl: "https://developer.apple.com/documentation/bundleresources/information-property-list",
+  lastVerified: VERIFIED_P11,
+  check(facts) {
+    const ios = facts.ios;
+    const built = facts.inputKind === "ipa";
+    if (!ios || !built && facts.inputKind !== "xcode-project" || !Object.keys(ios.infoPlist).length) return [];
+    const p = ios.infoPlist;
+    const at = (k) => ios.infoPlistKeyEvidence?.[k] ?? { file: ios.infoPlistPath };
+    const out = [];
+    const add = (message, key, detail) => out.push({ severity: "blocker", confidence: built ? "certain" : "likely", message, evidence: [{ ...at(key), detail }] });
+    const v = facts.version;
+    if (v !== void 0 && !/\$[({]/.test(v) && !/^\d+(?:\.\d+){0,2}$/.test(v))
+      add(`The app version "${v}" isn't one to three numbers separated by periods, so App Store Connect rejects the upload (ITMS-90060).`, "CFBundleShortVersionString", `CFBundleShortVersionString = ${v}`);
+    const family = ios.deviceFamily;
+    if (!family?.some((f) => f === 1 || f === 2)) return out;
+    const launch = Object.keys(p).some((k) => /^UILaunch(?:StoryboardName|Storyboards|Screens?)\b/.test(k) || k === "UILaunchScreen_Generation");
+    if (!launch) add("No launch screen is set (UILaunchStoryboardName or UILaunchScreen). Apple requires one for every iPhone and iPad app, and rejects iPad builds without it (ITMS-90475).", "UILaunchScreen", "no launch screen key");
+    const listKey = ["UISupportedInterfaceOrientations~ipad", "UISupportedInterfaceOrientations_iPad", "UISupportedInterfaceOrientations"].find((k) => k in p);
+    const raw = listKey ? p[listKey] : void 0;
+    const list2 = Array.isArray(raw) ? raw.map(String) : typeof raw === "string" && !raw.includes("$") ? raw.split(/\s+/).filter(Boolean) : void 0;
+    const full = p.UIRequiresFullScreen === true || /^(?:YES|true)$/i.test(String(p.UIRequiresFullScreen ?? ""));
+    if (family.includes(2) && list2?.length && !full) {
+      const missing = ORIENTATIONS.filter((o) => !list2.includes(o));
+      if (missing.length)
+        add(`The app runs on iPad but doesn't support every orientation (missing ${missing.map((m) => m.replace("UIInterfaceOrientation", "")).join(", ")}). iPad multitasking needs all four unless the app requires full screen (ITMS-90474).`, listKey, `${listKey} has ${list2.length} of 4 orientations`);
+    }
+    if (built && !p.CFBundleIconName) add("CFBundleIconName is missing, so the app icon isn't in an asset catalog. App Store Connect rejects builds without it (ITMS-90713).", "CFBundleIconName", "CFBundleIconName not set");
+    return out;
+  }
+};
+var IOS_ICON_001 = {
+  id: "IOS-ICON-001",
+  platform: "ios",
+  title: "App Store icon is missing or transparent",
+  guideline: "App Store Connect upload validation",
+  storeCodes: ["ITMS-90717", "ITMS-90704"],
+  severity: "blocker",
+  confidence: "likely",
+  fix: "Export the 1024\xD71024 icon as a PNG without an alpha channel (in Preview: File > Export and untick Alpha) and put it in the App Store slot of the AppIcon set.",
+  sourceUrl: "https://developer.apple.com/design/human-interface-guidelines/app-icons",
+  lastVerified: VERIFIED_P11,
+  check(facts) {
+    const icon = facts.ios?.appIcon;
+    if (!icon || facts.platform !== "ios") return [];
+    if (icon.problem === "missing")
+      return [{ severity: "blocker", confidence: "likely", message: `The app icon set ${icon.name} has no 1024\xD71024 App Store icon. App Store Connect rejects builds without one (ITMS-90704).`, evidence: [icon.evidence] }];
+    if (icon.problem === "alpha")
+      return [{ severity: "blocker", confidence: "likely", message: "The 1024\xD71024 App Store icon is partly transparent. App Store Connect doesn't accept icons with transparency (ITMS-90717).", evidence: [icon.evidence] }];
+    if (icon.problem === "size")
+      return [{ severity: "blocker", confidence: "likely", message: `The App Store icon is ${icon.size} pixels; it must be 1024\xD71024 (ITMS-90704).`, evidence: [icon.evidence] }];
+    return [];
+  }
+};
+var IOS_WEB_001 = {
+  id: "IOS-WEB-001",
+  platform: "ios",
+  title: "Uses UIWebView, which Apple no longer accepts",
+  guideline: "Apple 2.5.1",
+  storeCodes: ["ITMS-90809"],
+  severity: "blocker",
+  confidence: "certain",
+  fix: "Replace UIWebView with WKWebView. If it comes from an SDK (the evidence shows which), update the SDK or remove it.",
+  sourceUrl: "https://developer.apple.com/documentation/uikit/uiwebview",
+  lastVerified: VERIFIED_P11,
+  check(facts) {
+    const use = facts.ios?.uiWebView ?? [];
+    if (!use.length) return [];
+    const built = facts.inputKind === "ipa";
+    return [{
+      severity: "blocker",
+      confidence: built ? "certain" : "likely",
+      message: `${built ? "The build references" : "The code uses"} UIWebView. App Store Connect rejects new apps and updates that use it (ITMS-90809).`,
+      evidence: limit(use)
+    }];
+  }
+};
+var IOS_BUILD_001 = {
+  id: "IOS-BUILD-001",
+  platform: "ios",
+  title: "This file can't be uploaded to the App Store",
+  guideline: "App Store Connect upload validation",
+  storeCodes: ["ITMS-90087", "ITMS-90161", "ITMS-90046"],
+  severity: "blocker",
+  confidence: "certain",
+  fix: "In Xcode: Product > Archive, then Distribute App > App Store Connect. For simulator code inside a framework, use the .xcframework version of the SDK, or strip the x86_64 part with lipo.",
+  sourceUrl: "https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases",
+  lastVerified: VERIFIED_P11,
+  check(facts) {
+    const b = facts.ios?.build;
+    if (!b) return [];
+    const out = [];
+    if (b.simulatorCode.length)
+      out.push({ severity: "blocker", confidence: "certain", message: `${b.simulatorCode.length === 1 ? "A binary contains" : `${b.simulatorCode.length} binaries contain`} simulator code (x86_64 or i386). App Store Connect rejects it as an unsupported architecture (ITMS-90087).`, evidence: limit(b.simulatorCode) });
+    if (b.debuggable || b.provisionedDevices)
+      out.push({
+        severity: "warning",
+        confidence: "certain",
+        message: `This is a ${b.debuggable ? "development" : "ad hoc"} build, not an App Store export: ${b.debuggable ? "it's signed with get-task-allow (a debugger can attach)" : "its provisioning profile lists test devices"}. App Store Connect won't accept this file.`,
+        evidence: [b.debuggable ?? b.provisionedDevices]
+      });
+    return out;
+  }
+};
+var AND_MAN_001 = {
+  id: "AND-MAN-001",
+  platform: "android",
+  title: "Manifest setting that stops install or upload",
+  guideline: "Android 12 behavior changes / Play Console upload checks",
+  storeCodes: ["Play Console: debuggable APK", "INSTALL_PARSE_FAILED_MANIFEST_MALFORMED"],
+  severity: "blocker",
+  confidence: "certain",
+  fix: "Add android:exported (true only for components other apps must start, such as the launcher activity) to every component with an intent filter. Remove android:debuggable: the build type sets it. Upload the release build.",
+  sourceUrl: "https://developer.android.com/about/versions/12/behavior-changes-12#exported",
+  lastVerified: VERIFIED_P11,
+  check(facts) {
+    const a = facts.android;
+    if (!a) return [];
+    const out = [];
+    const built = facts.inputKind !== "android-project";
+    const missing = (a.targetSdk ?? 0) >= 31 ? a.manifest.missingExported ?? [] : [];
+    if (missing.length)
+      out.push({
+        severity: "blocker",
+        confidence: "certain",
+        message: `${plural(missing.length, "component")} with an intent filter ${missing.length === 1 ? "doesn't" : "don't"} set android:exported (${names(missing.map((m) => m.split(".").pop()))}). From Android 12 (target 31) the app doesn't build or install without it.`,
+        evidence: limit(missing.map((m) => ({ file: a.manifestPath, detail: m })))
+      });
+    if (a.manifest.debuggable)
+      out.push({
+        severity: built ? "warning" : "blocker",
+        confidence: "certain",
+        message: built ? "This is a debug build (android:debuggable is true). Play Console doesn't accept debuggable builds: upload the release build." : 'The manifest sets android:debuggable="true", so release builds are debuggable too. Play Console rejects them.',
+        evidence: [{ file: a.manifestPath, detail: "android:debuggable = true" }]
+      });
+    return out;
+  }
+};
+var PAIR = { "armeabi-v7a": "arm64-v8a", armeabi: "arm64-v8a", x86: "x86_64" };
+var AND_64BIT_001 = {
+  id: "AND-64BIT-001",
+  platform: "android",
+  title: "32-bit native code without its 64-bit version",
+  guideline: "Play: 64-bit requirement",
+  storeCodes: ["Play Console: 64-bit requirement"],
+  severity: "blocker",
+  confidence: "certain",
+  fix: "Build native code for arm64-v8a (and x86_64 if you ship x86): add them to ndk.abiFilters, and update SDKs that only ship 32-bit .so files.",
+  sourceUrl: "https://developer.android.com/google/play/requirements/64-bit",
+  lastVerified: VERIFIED_P11,
+  check(facts) {
+    const a = facts.android;
+    if (!a || a.formFactor !== "phone") return [];
+    const abis = new Set(a.nativeLibs.map((l) => l.abi));
+    const lonely = [...abis].filter((x) => PAIR[x] && !abis.has(PAIR[x]));
+    if (!lonely.length) return [];
+    const sure = facts.inputKind === "aab";
+    return [{
+      severity: sure ? "blocker" : "warning",
+      confidence: sure ? "certain" : "likely",
+      message: `Native code ships for ${lonely.join(" and ")} without ${[...new Set(lonely.map((x) => PAIR[x]))].join(" and ")}. Google Play requires a 64-bit version of every 32-bit architecture${sure ? "" : " (ignore this if you upload separate APKs per architecture)"}.`,
+      evidence: limit(a.nativeLibs.filter((l) => lonely.includes(l.abi)).map((l) => ({ file: l.path, detail: l.abi })))
+    }];
+  }
+};
 var IOS_PERM_001 = {
   id: "IOS-PERM-001",
   platform: "apple",
@@ -17193,7 +17794,7 @@ function hasValue(v) {
 }
 var PLACEHOLDER = /\b(todo|tbd|fixme|lorem|ipsum|placeholder|test(ing)?|xxx+|asdf|foo|bar|description here|change me)\b/i;
 var VAR_ONLY = /^\s*\$\([A-Z0-9_]+\)\s*$/;
-var PURPOSE = /\b(to|so|for|when|while|lets?|allows?|enables?|helps?|in order|used|uses|use|so that|because|scan|share|save|upload|record|take|find|show|attach|connect|track|measure|verify)\b/i;
+var PURPOSE = /\b(to|so|for|when|while|lets?|allows?|enables?|helps?|in order|used|uses|use|so that|because|scan|share|save|upload|record|take|find|show|attach|connect|track|measure|verify|based on|get|see|view|play|import|export|add|choose|pick|select|detect|locate|nearby|recommend\w*|suggest\w*|personali[sz]\w*|send|receive|sync|unlock|search|explore|discover|navigate|remind\w*|identify|provide)\b/i;
 var GENERIC = /^(this app|the app|app|\$\(PRODUCT_NAME\)|we)\s+(needs?|requires?|wants?|would like|is requesting)\s+(to\s+)?(access|permission|use)(\s+(to|of))?(\s+(your|the))?\s+[\w\s]{0,20}\.?$/i;
 var IOS_PERM_002 = {
   id: "IOS-PERM-002",
@@ -17271,7 +17872,7 @@ var IOS_PRIV_001 = {
       out.push({
         severity: strong ? "blocker" : "warning",
         confidence: strong ? usesRequired.some((u) => u.origin === "code") ? "certain" : "likely" : "likely",
-        message: strong ? `No app-level PrivacyInfo.xcprivacy found, and the app uses required-reason APIs (${[...new Set(usesRequired.map((u) => u.key.replace("NSPrivacyAccessedAPICategory", "")))].join(", ")}). App Store Connect will reject the build.` : "No app-level PrivacyInfo.xcprivacy found. Apple expects every app to describe its data use; it becomes mandatory as soon as you use a required-reason API (UserDefaults counts).",
+        message: strong ? `No app-level PrivacyInfo.xcprivacy found, and the app uses required-reason APIs (${[...new Set(usesRequired.map((u) => u.key.replace("NSPrivacyAccessedAPICategory", "")))].join(", ")}). Apple doesn't accept builds that leave these undeclared (ITMS-91053).` : "No app-level PrivacyInfo.xcprivacy found. Apple expects every app to describe its data use; it becomes mandatory as soon as you use a required-reason API (UserDefaults counts).",
         evidence: limit(usesRequired.map((u) => u.evidence), 3)
       });
       return out;
@@ -17774,11 +18375,11 @@ var AND_SDK_002 = {
     const next = policy.android.nextTargetSdk;
     if (!a || a.targetSdk === void 0 || !next) return [];
     const date = new Date(next.effectiveDate);
-    const days = Math.ceil((date.getTime() - now.getTime()) / 864e5);
-    if (days < 0 || days > 90) return [];
+    const days2 = Math.ceil((date.getTime() - now.getTime()) / 864e5);
+    if (days2 < 0 || days2 > 90) return [];
     const required = next[a.formFactor];
     if (a.targetSdk >= required) return [];
-    return [{ severity: "info", confidence: "certain", message: `In ${days} days (${next.effectiveDate}) Play will require targetSdk ${required}; this app targets ${a.targetSdk}.`, evidence: ev(a.targetSdkSource) }];
+    return [{ severity: "info", confidence: "certain", message: `In ${days2} days (${next.effectiveDate}) Play will require targetSdk ${required}; this app targets ${a.targetSdk}.`, evidence: ev(a.targetSdkSource) }];
   }
 };
 var TYPE_PERMISSION = {
@@ -17885,6 +18486,15 @@ var AND_PERM_001 = {
     for (const p of a.permissions) {
       const why = SENSITIVE[p];
       if (why) out.push({ severity: "warning", confidence: "certain", message: `${p.replace("android.permission.", "")}: ${why}`, evidence: [a.manifest.permissionEvidence?.[p] ?? { file: a.manifestPath, detail: p }] });
+    }
+    for (const s of a.manifest.boundServices ?? []) {
+      const vpn = /VPN/.test(s.permission);
+      out.push({
+        severity: "warning",
+        confidence: "certain",
+        message: vpn ? `${s.name.split(".").pop()} is a VPN service: only apps whose core feature is a VPN (or parental control, security\u2026) may use it, and Play needs the VPN service declaration.` : `${s.name.split(".").pop()} is an accessibility service: Play needs the AccessibilityService declaration, a prominent disclosure and consent in the app.`,
+        evidence: [{ file: a.manifestPath, detail: `${s.name} (${s.permission})` }]
+      });
     }
     return out;
   }
@@ -18892,6 +19502,8 @@ var AND_ACCT_001 = {
   }
 };
 var BUILTIN_RULES = [
+  SCAN_001,
+  SEC_001,
   IOS_PERM_001,
   IOS_PERM_002,
   IOS_PERM_003,
@@ -18911,6 +19523,10 @@ var BUILTIN_RULES = [
   IOS_IAP_001,
   IOS_BG_001,
   IOS_UGC_001,
+  IOS_PLIST_001,
+  IOS_ICON_001,
+  IOS_WEB_001,
+  IOS_BUILD_001,
   AND_SDK_001,
   AND_SDK_002,
   AND_FGS_001,
@@ -18922,6 +19538,8 @@ var BUILTIN_RULES = [
   AND_AI_001,
   AND_ACCT_001,
   AND_UGC_001,
+  AND_MAN_001,
+  AND_64BIT_001,
   MAC_SBX_001,
   MAC_SBX_002,
   MAC_SBX_003,
@@ -18992,7 +19610,7 @@ var policy_default = {
     minSdkSourceUrl: "https://developer.apple.com/news/upcoming-requirements/?id=04282026a"
   }
 };
-var VERSION = "0.1.0";
+var VERSION = "0.2.0";
 var DEFAULT_POLICY = policy_default;
 var NO_DECLARATION = {
   app_store: "App Store privacy label wasn't compared (IOS-PRIV-005): add .okayed/app-privacy.json, or add the label in the dashboard.",
@@ -19065,6 +19683,41 @@ function summarize(findings) {
   score = Math.max(0, Math.round(score));
   return { blocker, warning, info, score, verdict: blocker ? "RED" : warning ? "YELLOW" : "GREEN" };
 }
+var BASELINE_FILE = ".okayed/baseline.json";
+function baselineKey(ruleId, file, message) {
+  return `${ruleId}|${file ?? ""}|${message.replace(/\d+/g, "#").replace(/\s+/g, " ").slice(0, 200)}`;
+}
+var keyOf = (f) => baselineKey(f.ruleId, f.evidence.find((e) => e.file)?.file, f.message);
+function loadBaseline(root) {
+  const p = join13(root, BASELINE_FILE);
+  if (!existsSync2(p)) return void 0;
+  try {
+    const j = JSON.parse(readFileSync8(p, "utf8"));
+    return j.version === 1 && Array.isArray(j.accepted) ? j : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function applyBaseline(report, baseline, now = /* @__PURE__ */ new Date()) {
+  if (!baseline?.accepted.length) return report;
+  const live = /* @__PURE__ */ new Map();
+  for (const e of baseline.accepted) {
+    if (e.expires && new Date(e.expires) < now) continue;
+    live.set(baselineKey(e.ruleId, e.file, e.message), e);
+  }
+  const accepted = [];
+  const findings = report.findings.filter((f) => {
+    const hit = live.get(keyOf(f));
+    if (!hit) return true;
+    accepted.push({ ...f, acceptedReason: hit.reason, acceptedUntil: hit.expires });
+    return false;
+  });
+  if (!accepted.length) return report;
+  const counts = /* @__PURE__ */ new Map();
+  for (const a of accepted) counts.set(a.ruleId, (counts.get(a.ruleId) ?? 0) + 1);
+  const note = `${accepted.length} finding${accepted.length === 1 ? "" : "s"} accepted in ${BASELINE_FILE}, not scored: ${[...counts].map(([r, n]) => n > 1 ? `${r} \xD7${n}` : r).join(", ")}.`.slice(0, 480);
+  return { ...report, facts: { ...report.facts, notAudited: [...report.facts.notAudited, note] }, findings, accepted, summary: summarize(findings) };
+}
 var useColor = () => !process.env.NO_COLOR && process.env.FORCE_COLOR !== "0" && (process.stdout.isTTY || !!process.env.FORCE_COLOR);
 var c = (code) => (s) => useColor() ? `\x1B[${code}m${s}\x1B[0m` : s;
 var red = c("31");
@@ -19094,7 +19747,7 @@ function toMarkdown(reports) {
     for (const x of r.findings) {
       const e = x.evidence[0];
       const where = e?.file ? `\`${e.file}${e.line ? `:${e.line}` : ""}\`` : "";
-      out.push(`| ${EMOJI[x.severity]} | [${x.ruleId}](${x.rule.sourceUrl}) | ${esc(x.message)}${x.confidence === "likely" ? " _(likely)_" : ""} | ${where} |`);
+      out.push(`| ${EMOJI[x.severity]} | [${x.ruleId}](${x.rule.sourceUrl}) | ${esc2(x.message)}${x.confidence === "likely" ? " _(likely)_" : ""} | ${where} |`);
     }
     out.push("");
     out.push("<details><summary>How to fix</summary>\n");
@@ -19102,12 +19755,19 @@ function toMarkdown(reports) {
     for (const x of r.findings) {
       if (seen.has(x.ruleId)) continue;
       seen.add(x.ruleId);
-      out.push(`- **${x.ruleId} \xB7 ${x.rule.title}** \u2014 ${esc(x.rule.fix)} (${x.rule.guideline})`);
+      out.push(`- **${x.ruleId} \xB7 ${x.rule.title}** \u2014 ${esc2(x.rule.fix)} (${x.rule.guideline})`);
     }
     out.push("\n</details>");
+    if (r.accepted?.length) {
+      out.push(`
+<details><summary>${r.accepted.length} accepted in .okayed/baseline.json (not scored)</summary>
+`);
+      for (const a of r.accepted) out.push(`- **${a.ruleId} \xB7 ${a.rule.title}** \u2014 ${esc2(a.message)} _Reason: ${esc2(a.acceptedReason)}${a.acceptedUntil ? `, until ${a.acceptedUntil}` : ""}_`);
+      out.push("\n</details>");
+    }
     if (f.notAudited.length) {
       out.push("\n<details><summary>Not audited</summary>\n");
-      for (const n of f.notAudited) out.push(`- ${esc(n)}`);
+      for (const n of f.notAudited) out.push(`- ${esc2(n)}`);
       out.push("\n</details>");
     }
   }
@@ -19115,7 +19775,7 @@ function toMarkdown(reports) {
   out.push("<sub>Okayed reduces rejection risk; it can't guarantee approval.</sub>");
   return out.join("\n");
 }
-function esc(s) {
+function esc2(s) {
   return s.replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 var LEVEL = { blocker: "error", warning: "warning", info: "note" };
@@ -19165,7 +19825,8 @@ function toSarif(reports) {
 function toUploadPayload(reports, meta) {
   const clean = Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== void 0 && v !== ""));
   return {
-    reports: reports.map((r) => ({ ...r, facts: { ...r.facts, root: basename6(r.facts.root) } })),
+    // Accepted findings are summarised in notAudited; the full list stays local.
+    reports: reports.map(({ accepted: _accepted, ...r }) => ({ ...r, facts: { ...r.facts, root: basename6(r.facts.root) } })),
     meta: clean
   };
 }
@@ -19277,19 +19938,20 @@ async function main() {
   const disabled = env("SC_DISABLE").split(",").map((s) => s.trim()).filter(Boolean);
   let reports;
   try {
-    reports = parseInput(target, { platform, distribution }).map((facts) => runRules(facts, { disabled }));
+    const baseline = loadBaseline(target) ?? loadBaseline(workspace);
+    reports = parseInput(target, { platform, distribution }).map((facts) => applyBaseline(runRules(facts, { disabled }), baseline));
   } catch (e) {
     process.stdout.write(`::error title=Okayed::${e.message}
 `);
     process.exitCode = 1;
     return;
   }
-  reports = rebaseEvidence(reports, relative2(workspace, target));
+  reports = rebaseEvidence(reports, relative3(workspace, target));
   const key = `${inputPath}${platform ? `:${platform}` : ""}`;
   const marker = `<!-- okayed-report:${key} -->`;
   let markdown = toMarkdown(reports).replace("<!-- okayed-report -->", marker);
-  const sarifFile = join12(env("RUNNER_TEMP", workspace), `okayed-${key.replace(/[^\w.-]+/g, "_")}.sarif`);
-  writeFileSync(sarifFile, JSON.stringify(toSarif(reports), null, 2));
+  const sarifFile = join14(env("RUNNER_TEMP", workspace), `okayed-${key.replace(/[^\w.-]+/g, "_")}.sarif`);
+  writeFileSync2(sarifFile, JSON.stringify(toSarif(reports), null, 2));
   const summaryFile = env("GITHUB_STEP_SUMMARY");
   if (summaryFile) appendFileSync(summaryFile, markdown.replace(marker, "") + "\n");
   if (env("SC_ANNOTATIONS", "true") === "true") for (const line of annotations(reports)) process.stdout.write(line + "\n");
@@ -19373,7 +20035,7 @@ function headSha() {
   const path = env("GITHUB_EVENT_PATH");
   if (!path) return void 0;
   try {
-    return JSON.parse(readFileSync7(path, "utf8")).pull_request?.head?.sha;
+    return JSON.parse(readFileSync9(path, "utf8")).pull_request?.head?.sha;
   } catch {
     return void 0;
   }
@@ -19382,7 +20044,7 @@ function pullRequestNumber() {
   const path = env("GITHUB_EVENT_PATH");
   if (!path) return void 0;
   try {
-    const ev2 = JSON.parse(readFileSync7(path, "utf8"));
+    const ev2 = JSON.parse(readFileSync9(path, "utf8"));
     return ev2.pull_request?.number ?? (ev2.issue?.pull_request ? ev2.issue.number : void 0);
   } catch {
     return void 0;
